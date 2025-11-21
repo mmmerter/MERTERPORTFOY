@@ -93,7 +93,7 @@ def get_data_from_sheet():
         return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
 
 # --- MARKET VE PORTFÖY ŞERİDİ OLUŞTURUCU ---
-@st.cache_data(ttl=300) # 5 dakikada bir yenile
+@st.cache_data(ttl=45) # 45 saniyede bir yenile
 def get_combined_ticker(df_portfolio):
     # 1. GENEL PİYASA
     market_symbols = {
@@ -601,3 +601,4 @@ elif selected == "Ekle/Çıkar":
                         st.rerun()
                     else: st.error("Lütfen geçerli adet ve fiyat giriniz.")
         else: st.info("Satılacak varlık yok.")
+
