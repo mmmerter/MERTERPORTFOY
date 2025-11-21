@@ -51,7 +51,7 @@ selected = option_menu(
     orientation="horizontal",
     styles={
         "container": {"padding": "0!important", "background-color": "#161616"}, 
-        "icon": {"color": "red", "font-size": "18px"}, 
+        "icon": {"color": "white", "font-size": "18px"}, 
         "nav-link": {
             "font-size": "14px", 
             "text-align": "center", 
@@ -290,6 +290,22 @@ def render_pazar_tab(df, filter_text, currency_symbol):
     c1, c2 = st.columns(2)
     c1.metric(f"Toplam {filter_text} Varlık", f"{currency_symbol}{total_val:,.0f}")
     c2.metric(f"Toplam {filter_text} Kâr/Zarar", f"{currency_symbol}{total_pl:,.0f}", delta=f"{total_pl:,.0f}")
+    
+    # --- GRAFİKLER (HER SEKME İÇİN) ---
+    st.divider()
+    col_pie, col_bar = st.columns([1, 1])
+    with col_pie:
+        st.subheader(f"{filter_text} Varlık Dağılımı")
+        fig_pie = px.pie(df_filtered, values='Değer', names='Kod', hole=0.4)
+        st.plotly_chart(fig_pie, use_container_width=True)
+    with col_bar:
+        st.subheader(f"{filter_text} Varlık Değerleri")
+        df_sorted = df_filtered.sort_values(by="Değer", ascending=False)
+        fig_bar = px.bar(df_sorted, x='Kod', y='Değer', color='Top. P/L')
+        st.plotly_chart(fig_bar, use_container_width=True)
+    
+    st.divider()
+    st.subheader(f"{filter_text} Portföy Listesi")
     st.dataframe(df_filtered, use_container_width=True, hide_index=True)
 
 sym = "₺" if GORUNUM_PB == "TRY" else "$"
@@ -308,12 +324,10 @@ if selected == "Dashboard":
         # --- DASHBOARD: MAKRO GÖRÜNÜM ---
         with col_pie:
             st.subheader("Dağılım")
-            # PASTA: Pazar dağılımı (BIST, ABD vs.)
             fig_pie = px.pie(portfoy_only, values='Değer', names='Pazar', hole=0.4)
             st.plotly_chart(fig_pie, use_container_width=True)
         with col_bar:
             st.subheader("Pazar Büyüklükleri")
-            # BAR CHART (REVİZE EDİLDİ): Artık Hisse değil, PAZAR toplamlarını gösteriyor.
             df_pazar_group = portfoy_only.groupby("Pazar")["Değer"].sum().reset_index().sort_values(by="Değer", ascending=False)
             fig_bar = px.bar(df_pazar_group, x='Pazar', y='Değer', color='Pazar')
             st.plotly_chart(fig_bar, use_container_width=True)
@@ -326,20 +340,16 @@ if selected == "Dashboard":
 
 elif selected == "Tümü":
     if not portfoy_only.empty:
-        # --- TÜMÜ: MİKRO (HİSSE BAZLI) GÖRÜNÜM ---
         col_pie_det, col_bar_det = st.columns([1, 1])
         with col_pie_det:
             st.subheader("Varlık Bazlı Dağılım")
-            # PASTA: Hangi Hisse Kaçlık Yer Kaplıyor (Google, Akbank...)
             fig_pie_det = px.pie(portfoy_only, values='Değer', names='Kod', hole=0.4)
             st.plotly_chart(fig_pie_det, use_container_width=True)
         with col_bar_det:
             st.subheader("Varlık Bazlı Değerler")
-            # BAR: Hangi Hisse Ne Kadar Değerli
             top_assets = portfoy_only.sort_values(by="Değer", ascending=False)
             fig_bar_det = px.bar(top_assets, x='Kod', y='Değer', color='Pazar')
             st.plotly_chart(fig_bar_det, use_container_width=True)
-            
         st.divider()
         st.subheader("Tüm Portföy Listesi")
         st.dataframe(portfoy_only, use_container_width=True, hide_index=True)
