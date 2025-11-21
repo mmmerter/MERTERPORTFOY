@@ -41,23 +41,29 @@ with c_toggle:
     st.write("") 
     GORUNUM_PB = st.radio("Para Birimi:", ["TRY", "USD"], horizontal=True)
 
-# --- NAVİGASYON MENÜSÜ (SATIŞLAR EKLENDİ) ---
+# --- NAVİGASYON MENÜSÜ (GRİ/BEYAZ/SİYAH TEMA & KALIN PUNTO) ---
 selected = option_menu(
     menu_title=None, 
-    # YENİ SIRA: Emtia > Fiziki > Kripto ... Satışlar > Ekle/Çıkar
     options=["Dashboard", "Tümü", "BIST", "ABD", "Emtia", "Fiziki", "Kripto", "İzleme", "Satışlar", "Ekle/Çıkar"], 
-    
-    # İKONLAR
     icons=["speedometer2", "list-task", "graph-up-arrow", "currency-dollar", "fuel-pump", "house", "currency-bitcoin", "eye", "receipt", "gear"], 
-    
     menu_icon="cast", 
     default_index=0, 
     orientation="horizontal",
     styles={
-        "container": {"padding": "0!important", "background-color": "#0E1117"},
-        "icon": {"color": "#1DA1F2", "font-size": "18px"}, 
-        "nav-link": {"font-size": "14px", "text-align": "center", "margin":"0px", "--hover-color": "#262730"},
-        "nav-link-selected": {"background-color": "#1DA1F2"}, 
+        "container": {"padding": "0!important", "background-color": "#161616"}, # Koyu Zemin
+        "icon": {"color": "white", "font-size": "18px"}, # İkonlar Beyaz
+        "nav-link": {
+            "font-size": "14px", 
+            "text-align": "center", 
+            "margin":"0px", 
+            "--hover-color": "#333333",
+            "font-weight": "bold",  # KALIN PUNTO (BOLD)
+            "color": "#bfbfbf"      # Seçili olmayan yazı rengi (Açık Gri)
+        },
+        "nav-link-selected": {
+            "background-color": "#ffffff", # Seçili Arka Plan: BEYAZ
+            "color": "#000000",            # Seçili Yazı: SİYAH
+        }, 
     }
 )
 
@@ -113,7 +119,6 @@ def get_usd_try():
 
 USD_TRY = get_usd_try()
 
-# --- GOOGLE SHEETS: PORTFÖY ---
 def get_data_from_sheet():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -141,7 +146,6 @@ def save_data_to_sheet(df):
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
-# --- GOOGLE SHEETS: SATIŞLAR (YENİ) ---
 def get_sales_history():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -167,7 +171,6 @@ def add_sale_record(date, code, market, qty, price, cost, profit):
     except Exception as e:
         st.error(f"Satış kaydedilemedi: {e}")
 
-# --- DATA MOTORU ---
 def get_yahoo_symbol(kod, pazar):
     if "BIST" in pazar: return f"{kod}.IS" if not kod.endswith(".IS") else kod
     elif "KRIPTO" in pazar: return f"{kod}-USD" if not kod.endswith("-USD") else kod
@@ -333,14 +336,13 @@ elif selected == "Satışlar":
     st.header("💰 Gerçekleşen Satış Geçmişi")
     sales_df = get_sales_history()
     if not sales_df.empty:
-        # Sayısal dönüşüm
         sales_df["Kâr/Zarar"] = pd.to_numeric(sales_df["Kâr/Zarar"], errors='coerce')
         total_realized_pl = sales_df["Kâr/Zarar"].sum()
         st.metric("Toplam Realize Edilen (Cepteki) Kâr/Zarar", f"{total_realized_pl:,.2f}")
         st.divider()
         st.dataframe(sales_df.iloc[::-1], use_container_width=True, hide_index=True)
     else:
-        st.info("Henüz yapılmış bir satış işlemi yok.")
+        st.info("Henüz satış işlemi yok.")
 
 elif selected == "Ekle/Çıkar":
     st.header("Varlık Yönetimi")
@@ -380,8 +382,6 @@ elif selected == "Ekle/Çıkar":
             varliklar = portfoy_df[portfoy_df["Tip"] == "Portfoy"]["Kod"].unique()
             with st.form("sell_asset_form"):
                 satilacak_kod = st.selectbox("Varlık Seç", varliklar)
-                
-                # Seçilen varlık bilgisi
                 if satilacak_kod:
                     mevcut_veri = portfoy_df[portfoy_df["Kod"] == satilacak_kod].iloc[0]
                     mevcut_adet = float(mevcut_veri["Adet"])
@@ -400,24 +400,16 @@ elif selected == "Ekle/Çıkar":
                     if satilan_adet > 0 and satis_fiyati > 0:
                         kar_zarar = (satis_fiyati - mevcut_maliyet) * satilan_adet
                         tarih = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        
-                        # Satış kaydı ekle
                         add_sale_record(tarih, satilacak_kod, pazar_yeri, satilan_adet, satis_fiyati, mevcut_maliyet, kar_zarar)
-                        
-                        # Portföy güncelle
                         yeni_adet = mevcut_adet - satilan_adet
-                        
-                        if yeni_adet <= 0.0001: # Tamamen satıldıysa sil
+                        if yeni_adet <= 0.0001: 
                             portfoy_df = portfoy_df[portfoy_df["Kod"] != satilacak_kod]
                             st.success(f"{satilacak_kod} tamamen satıldı ve portföyden silindi.")
-                        else: # Kısmi satış
+                        else: 
                             portfoy_df.loc[portfoy_df["Kod"] == satilacak_kod, "Adet"] = yeni_adet
                             st.success(f"{satilan_adet} adet satıldı. Kalan: {yeni_adet}")
-                        
                         save_data_to_sheet(portfoy_df)
                         time.sleep(1)
                         st.rerun()
-                    else:
-                        st.error("Lütfen geçerli adet ve fiyat giriniz.")
-        else:
-            st.info("Satılacak varlık yok.")
+                    else: st.error("Lütfen geçerli adet ve fiyat giriniz.")
+        else: st.info("Satılacak varlık yok.")
