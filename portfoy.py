@@ -266,6 +266,21 @@ def get_historical_chart(df, usd_try):
             else: portfolio_history += (price_series * adet)
     return portfolio_history
 
+# --- RENKLENDİRME STİLİ (YENİ) ---
+def highlight_pnl(val):
+    if isinstance(val, (int, float)):
+        color = '#2ecc71' if val > 0 else '#e74c3c' if val < 0 else ''
+        return f'color: {color}'
+    return ''
+
+def styled_dataframe(df):
+    # Renklendirilecek kolonlar
+    subset_cols = [c for c in df.columns if "P/L" in c or "Kâr" in c or "%" in c]
+    # Formatlanacak kolonlar
+    format_dict = {c: "{:,.2f}" for c in df.columns if df[c].dtype in ['float64', 'int64']}
+    
+    return df.style.map(highlight_pnl, subset=subset_cols).format(format_dict)
+
 # --- MAIN ---
 portfoy_df = get_data_from_sheet()
 master_df = run_analysis(portfoy_df, USD_TRY, GORUNUM_PB)
@@ -291,22 +306,23 @@ def render_pazar_tab(df, filter_text, currency_symbol):
     c1.metric(f"Toplam {filter_text} Varlık", f"{currency_symbol}{total_val:,.0f}")
     c2.metric(f"Toplam {filter_text} Kâr/Zarar", f"{currency_symbol}{total_pl:,.0f}", delta=f"{total_pl:,.0f}")
     
-    # --- GRAFİKLER (HER SEKME İÇİN) ---
+    # GRAFİKLER
     st.divider()
     col_pie, col_bar = st.columns([1, 1])
     with col_pie:
-        st.subheader(f"{filter_text} Varlık Dağılımı")
+        st.subheader(f"{filter_text} Dağılım")
         fig_pie = px.pie(df_filtered, values='Değer', names='Kod', hole=0.4)
         st.plotly_chart(fig_pie, use_container_width=True)
     with col_bar:
-        st.subheader(f"{filter_text} Varlık Değerleri")
+        st.subheader(f"{filter_text} Değerleri")
         df_sorted = df_filtered.sort_values(by="Değer", ascending=False)
         fig_bar = px.bar(df_sorted, x='Kod', y='Değer', color='Top. P/L')
         st.plotly_chart(fig_bar, use_container_width=True)
     
     st.divider()
-    st.subheader(f"{filter_text} Portföy Listesi")
-    st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+    st.subheader(f"{filter_text} Liste")
+    # RENKLİ TABLO KULLANIMI
+    st.dataframe(styled_dataframe(df_filtered), use_container_width=True, hide_index=True)
 
 sym = "₺" if GORUNUM_PB == "TRY" else "$"
 
@@ -321,7 +337,6 @@ if selected == "Dashboard":
         st.divider()
         col_pie, col_bar = st.columns([1, 1])
         
-        # --- DASHBOARD: MAKRO GÖRÜNÜM ---
         with col_pie:
             st.subheader("Dağılım")
             fig_pie = px.pie(portfoy_only, values='Değer', names='Pazar', hole=0.4)
@@ -352,7 +367,7 @@ elif selected == "Tümü":
             st.plotly_chart(fig_bar_det, use_container_width=True)
         st.divider()
         st.subheader("Tüm Portföy Listesi")
-        st.dataframe(portfoy_only, use_container_width=True, hide_index=True)
+        st.dataframe(styled_dataframe(portfoy_only), use_container_width=True, hide_index=True)
     else:
         st.info("Veri yok.")
 
@@ -363,7 +378,7 @@ elif selected == "Fiziki": render_pazar_tab(portfoy_only, "FIZIKI", sym)
 elif selected == "Kripto": render_pazar_tab(portfoy_only, "KRIPTO", sym)
 elif selected == "İzleme":
     st.subheader("İzleme Listesi")
-    st.dataframe(takip_only, use_container_width=True, hide_index=True)
+    st.dataframe(styled_dataframe(takip_only), use_container_width=True, hide_index=True)
 
 elif selected == "Satışlar":
     st.header("💰 Gerçekleşen Satış Geçmişi")
@@ -373,7 +388,7 @@ elif selected == "Satışlar":
         total_realized_pl = sales_df["Kâr/Zarar"].sum()
         st.metric("Toplam Realize Edilen (Cepteki) Kâr/Zarar", f"{total_realized_pl:,.2f}")
         st.divider()
-        st.dataframe(sales_df.iloc[::-1], use_container_width=True, hide_index=True)
+        st.dataframe(styled_dataframe(sales_df.iloc[::-1]), use_container_width=True, hide_index=True)
     else:
         st.info("Henüz satış işlemi yok.")
 
