@@ -59,45 +59,63 @@ st.markdown("""
 
 st.title("Merter’in Bulut Tabanlı Portföy Takip Motoru")
 
-# --- SABİT KOLON İSİMLERİ (HATA ÖNLEYİCİ) ---
-# Bu liste sayesinde DataFrame asla kolonsuz kalmayacak.
+# --- SABİT KOLON İSİMLERİ ---
 ANALYSIS_COLS = ["Kod", "Pazar", "Tip", "Adet", "Maliyet", "Fiyat", "Önceki", "PB", 
                  "Değer", "Top. P/L", "Top. %", "Gün. P/L", "Gün. %", 
                  "TL Değer", "TL Maliyet", "TL Gün P/L", "Notlar"]
 
-# --- DEVASA VARLIK LİSTESİ ---
+# --- DEVASA VARLIK LİSTESİ (TÜM BIST DAHİL) ---
 MARKET_DATA = {
     "BIST (Tümü)": [
-        "THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK", "KCHOL", "SAHOL",
-        "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM", "HEKTS", "SASA", "ASTOR", "KONTR",
-        "AKSEN", "ALARK", "ARCLK", "ENKAI", "EUPWR", "GESAN", "GUBRF", "ISCTR", "KOZAL", "MGROS",
-        "ODAS", "OYAKC", "SMRTG", "SOKM", "TAVHL", "TTKOM", "VESTL", "YEOTK", "AGHOL", "AHGAZ",
-        "AKFGY", "AKSA", "ALFAS", "AEFES", "ASUZU", "AYDEM", "BAGFS", "BERA", "BIOEN", "BRSAN",
-        "BRYAT", "BUCIM", "CANTE", "CCOLA", "CEMTS", "CIMSA", "CWENE", "DOAS", "DOHOL", "ECILC",
-        "EGEEN", "EKGYO", "ENJSA", "EUREN", "FENER", "GENIL", "GLYHO", "GSDHO", "GWIND", "HALKB",
-        "ISDMR", "ISGYO", "ISMEN", "IZENR", "KCAER", "KMPUR", "KONKA", "KORDS", "KOZAA", "KRDMD",
-        "KZBGY", "MAVI", "MIATK", "OTKAR", "OYYAT", "PENTA", "PSGYO", "QUAGR", "RTALB", "SDTTR",
-        "SELEC", "SKBNK", "SNGYO", "TATGD", "TKFEN", "TKNSA", "TMSN", "TSKB", "TSPOR", "TTRAK",
-        "TURSG", "ULKER", "VAKBN", "VESBE", "ZOREN", "ADEL", "ADESE", "AGROT", "AKCNS", "AKSGY",
-        "ALGYO", "ALKIM", "ANACM", "ANELE", "ANGEN", "ANHYT", "ANSGR", "ARASE", "ARDYZ", "ARENA",
-        "ARSAN", "ATAGY", "ATAKP", "AVGYO", "AVHOL", "AVOD", "AYEN", "AYES", "AYGAZ", "AZTEK",
-        "BJKAS", "BOBET", "BOSSA", "BRISA", "BSOKE", "BTCIM", "CEOEM", "CONSE", "COSMO", "DARDL",
-        "EBEBK", "EKSUN", "ELITE", "EMKEL", "ERBOS", "ESEN", "ESCOM", "FORTE", "GEDIK", "GOKNR",
-        "GOLTS", "GOODY", "GOZDE", "GRSEL", "HEDEF", "HKTM", "HLGYO", "HUNER", "IHLAS", "IHLGM",
-        "INFO", "INVES", "IPEKE", "ISFIN", "ISGSY", "ISKPL", "JANTS", "KAREL", "KARSN", "KARTN",
-        "KATMR", "KAYSE", "KFEIN", "KGYO", "KLKIM", "KLMSN", "KNFRT", "KONYA", "KOPOL", "KRGYO",
-        "KRONT", "KRPLS", "KSTUR", "KUTPO", "LIDER", "LOGO", "LUKSK", "MAKIM", "MANAS", "MARBL",
-        "MEDTR", "MERCN", "METRO", "MOBTL", "MPARK", "MRGYO", "NATEN", "NETAS", "NUGYO", "NUHCM",
-        "OFSYM", "ONCSM", "ORCAY", "ORGE", "OSMEN", "OSTIM", "OTTO", "OZKGY", "OZRDN", "OZSUB",
-        "PAGYO", "PAMEL", "PAPIL", "PARSN", "PCILT", "PEKGY", "PENGD", "PETUN", "PINSU", "PKART",
-        "PNLSN", "PNSUT", "POLHO", "POLTK", "PRDGS", "PRKAB", "PRKME", "RNPOL", "RYGYO", "RYSAS",
-        "SANEL", "SANKO", "SARKY", "SAYAS", "SEKFK", "SEKUR", "SELGD", "SELVA", "SEYKM", "SILVR",
-        "SKTAS", "SMART", "SNGYO", "SNKRN", "SNPAM", "SODSN", "SOKE", "SONME", "SRVGY", "SUMAS",
-        "SUNTK", "SUWEN", "TABGD", "TARKM", "TBORG", "TDGYO", "TEKTU", "TERA", "TETMT", "TEZOL",
-        "TGSAS", "TLMAN", "TMPOL", "TNZTP", "TRCAS", "TRGYO", "TRILC", "TSGYO", "TUCLK", "TUKAS",
-        "TURGG", "UFUK", "ULAS", "ULUFA", "ULUSE", "ULUUN", "UMPAS", "UNLU", "USAK", "UZERB",
-        "VAKFN", "VAKKO", "VANGD", "VBTYZ", "VERTU", "VERUS", "VKFYO", "VKGYO", "VKING", "YAPRK",
-        "YATAS", "YAYLA", "YESIL", "YGGYO", "YGYO", "YKSLN", "YONGA", "YUNSA", "YYAPI", "ZEDUR"
+        "A1CAP", "ACSEL", "ADEL", "ADESE", "ADGYO", "AEFES", "AFYON", "AGESA", "AGHOL", "AGROT", "AGYO",
+        "AHGAZ", "AKBNK", "AKCNS", "AKENR", "AKFGY", "AKFYE", "AKGRT", "AKMGY", "AKSA", "AKSEN", "AKSGY",
+        "AKSUE", "AKYHO", "ALARK", "ALBRK", "ALCAR", "ALCTL", "ALFAS", "ALGYO", "ALKA", "ALKIM", "ALMAD",
+        "ALTIN", "ALTNY", "ALVES", "ANELE", "ANGEN", "ANHYT", "ANSGR", "ARASE", "ARCLK", "ARDYZ", "ARENA",
+        "ARSAN", "ARTMS", "ARZUM", "ASELS", "ASGYO", "ASTOR", "ASUZU", "ATAGY", "ATAKP", "ATATP", "ATEKS",
+        "ATLAS", "ATSYH", "AVGYO", "AVHOL", "AVOD", "AVPGY", "AVTUR", "AYCES", "AYDEM", "AYEN", "AYES",
+        "AYGAZ", "AZTEK", "BAGFS", "BAKAB", "BALAT", "BANVT", "BARMA", "BASCM", "BASGZ", "BAYRK", "BEGYO",
+        "BEYAZ", "BFREN", "BIENY", "BIGCH", "BIMAS", "BINHO", "BIOEN", "BIZIM", "BJKAS", "BLCYT", "BMSCH",
+        "BMSTL", "BNTAS", "BOBET", "BORLS", "BOSSA", "BRISA", "BRKO", "BRKSN", "BRKVY", "BRLSM", "BRMEN",
+        "BRSAN", "BRYAT", "BSOKE", "BTCIM", "BUCIM", "BURCE", "BURVA", "BVSAN", "BYDNR", "CANTE", "CATES",
+        "CCOLA", "CELHA", "CEMAS", "CEMTS", "CEOEM", "CIMSA", "CLEBI", "CMBTN", "CMENT", "CONSE", "COSMO",
+        "CRDFA", "CRFSA", "CUSAN", "CVKMD", "CWENE", "DAGHL", "DAGI", "DAPGM", "DARDL", "DENGE", "DERHL",
+        "DERIM", "DESA", "DESPC", "DEVA", "DGATE", "DGGYO", "DGNMO", "DIRIT", "DITAS", "DMSAS", "DNISI",
+        "DOAS", "DOBUR", "DOCO", "DOGUB", "DOHOL", "DOKTA", "DURDO", "DYOBY", "DZGYO", "EBEBK", "ECILC",
+        "ECZYT", "EDATA", "EDIP", "EGEEN", "EGEPO", "EGGUB", "EGPRO", "EGSER", "EKGYO", "EKKAL", "EKOSE",
+        "EKSUN", "ELITE", "EMKEL", "EMNIS", "ENERY", "ENJSA", "ENKAI", "ENSRI", "EPLAS", "ERBOS", "ERCB",
+        "EREGL", "ERSU", "ESCAR", "ESCOM", "ESEN", "ETILR", "ETYAT", "EUHOL", "EUKYO", "EUPWR", "EUREN",
+        "EUYO", "EYGYO", "FADE", "FENER", "FLAP", "FMIZP", "FONET", "FORMT", "FORTE", "FRIGO", "FROTO",
+        "FZLGY", "GARAN", "GARFA", "GEDIK", "GEDZA", "GENIL", "GENTS", "GEREL", "GESAN", "GLBMD", "GLCVY",
+        "GLRYH", "GLYHO", "GMTAS", "GOKNR", "GOLTS", "GOODY", "GOZDE", "GRNYO", "GRSEL", "GSDDE", "GSDHO",
+        "GSRAY", "GUBRF", "GWIND", "GZNMI", "HALKB", "HATEK", "HATSN", "HDFGS", "HEDEF", "HEKTS", "HKTM",
+        "HLGYO", "HRKET", "HTTBT", "HUBVC", "HUNER", "HURGZ", "ICBCT", "ICUGS", "IDGYO", "IEYHO", "IHAAS",
+        "IHEVA", "IHGZT", "IHLAS", "IHLGM", "IHYAY", "IMASM", "INDES", "INFO", "INGRM", "INTEM", "INVES",
+        "IPEKE", "ISATR", "ISBIR", "ISBTR", "ISCTR", "ISDMR", "ISFIN", "ISGSY", "ISGYO", "ISKPL", "ISKUR",
+        "ISMEN", "ISSEN", "ISYAT", "IZENR", "IZFAS", "IZINV", "IZMDC", "JANTS", "KAPLM", "KAREL", "KARSN",
+        "KARTN", "KARYE", "KATMR", "KAYSE", "KCAER", "KCHOL", "KENT", "KERVN", "KERVT", "KFEIN", "KGYO",
+        "KIMMR", "KLGYO", "KLKIM", "KLMSN", "KLNMA", "KLRHO", "KLSER", "KMPUR", "KNFRT", "KONKA", "KONTR",
+        "KONYA", "KOPOL", "KORDS", "KOZAA", "KOZAL", "KRDMA", "KRDMB", "KRDMD", "KRGYO", "KRONT", "KRPLS",
+        "KRSTL", "KRTEK", "KRVGD", "KSTUR", "KTLEV", "KTSKR", "KUTPO", "KUVVA", "KUYAS", "KZBGY", "KZGYO",
+        "LIDER", "LIDFA", "LINK", "LKMNH", "LOGO", "LUKSK", "MAALT", "MACKO", "MAGEN", "MAKIM", "MAKTK",
+        "MANAS", "MARBL", "MARK", "MARTI", "MAVI", "MEDTR", "MEGAP", "MEGMT", "MEKAG", "MNDTR", "MENBA",
+        "MERCN", "MERIT", "MERKO", "METRO", "METUR", "MGROS", "MIATK", "MIPAZ", "MMCAS", "MNDRS", "MOBTL",
+        "MOGAN", "MPARK", "MRGYO", "MRSHL", "MSGYO", "MTRKS", "MTRYO", "MZHLD", "NATEN", "NETAS", "NIBAS",
+        "NTGAZ", "NUGYO", "NUHCM", "OBAMS", "ODAS", "OFSYM", "ONCSM", "ORCAY", "ORGE", "ORMA", "OSMEN",
+        "OSTIM", "OTKAR", "OTTO", "OYAKC", "OYAYO", "OYLUM", "OYYAT", "OZGYO", "OZKGY", "OZRDN", "OZSUB",
+        "PAGYO", "PAMEL", "PAPIL", "PARSN", "PASEU", "PCILT", "PEGYO", "PEKGY", "PENGD", "PENTA", "PETKM",
+        "PETUN", "PGSUS", "PINSU", "PKART", "PKENT", "PLTUR", "PNLSN", "PNSUT", "POLHO", "POLTK", "PRDGS",
+        "PRKAB", "PRKME", "PRZMA", "PSGYO", "PUMAS", "QUAGR", "RALYH", "RAYSG", "REEDR", "RNPOL", "RODRG",
+        "ROYAL", "RTALB", "RUBNS", "RYGYO", "RYSAS", "SAHOL", "SAMAT", "SANEL", "SANFM", "SANKO", "SARKY",
+        "SASA", "SAYAS", "SDTTR", "SEKFK", "SEKUR", "SELEC", "SELGD", "SELVA", "SEYKM", "SILVR", "SISE",
+        "SKBNK", "SKTAS", "SKYMD", "SMART", "SMRTG", "SNGYO", "SNICA", "SNKRN", "SNPAM", "SODSN", "SOKE",
+        "SOKM", "SONME", "SRVGY", "SUMAS", "SUNTK", "SURGY", "SUWEN", "TABGD", "TARKM", "TATEN", "TATGD",
+        "TAVHL", "TBORG", "TCELL", "TDGYO", "TEKTU", "TERA", "TETMT", "TEZOL", "TGSAS", "THYAO", "TKFEN",
+        "TKNSA", "TLMAN", "TMPOL", "TMSN", "TNZTP", "TOASO", "TRCAS", "TRGYO", "TRILC", "TSGYO", "TSKB",
+        "TSPOR", "TTKOM", "TTRAK", "TUCLK", "TUKAS", "TUPRS", "TUREX", "TURGG", "TURSG", "UFUK", "ULAS",
+        "ULKER", "ULUFA", "ULUSE", "ULUUN", "UMPAS", "UNLU", "USAK", "UZERB", "VAKBN", "VAKFN", "VAKKO",
+        "VANGD", "VBTYZ", "VERTU", "VERUS", "VESBE", "VESTL", "VKFYO", "VKGYO", "VKING", "VRGYO", "YAPRK",
+        "YATAS", "YAYLA", "YBTAS", "YEOTK", "YESIL", "YGGYO", "YGYO", "YKBNK", "YKSLN", "YONGA", "YUNSA",
+        "YYAPI", "YYLGD", "ZEDUR", "ZGOLD", "ZOREN", "ZRGYO"
     ],
     "ABD (S&P + NASDAQ)": [
         "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "BRK-B", "LLY", "V", "TSM", "UNH", 
@@ -160,11 +178,11 @@ def get_data_from_sheet():
         
         df = pd.DataFrame(data)
         
-        # EKSİK KOLON KONTROLÜ (HAYAT KURTARAN KISIM)
+        # EKSİK KOLON KONTROLÜ
         expected_cols = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
         for col in expected_cols:
             if col not in df.columns:
-                df[col] = "" # Eksik kolonu boş olarak ekle
+                df[col] = "" 
                 
         return df
     except Exception as e:
@@ -181,7 +199,6 @@ def save_data_to_sheet(df):
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
 portfoy_df = get_data_from_sheet()
-# Sayısal dönüşümler
 if not portfoy_df.empty:
     portfoy_df["Adet"] = pd.to_numeric(portfoy_df["Adet"], errors='coerce').fillna(0)
     portfoy_df["Maliyet"] = pd.to_numeric(portfoy_df["Maliyet"], errors='coerce').fillna(0)
@@ -191,11 +208,18 @@ def fetch_market_data(kod, pazar, usd_try):
     yahoo_symbol = kod
     currency = "USD"
     
+    # ----------------------------------------------------
+    # BÜYÜK SIR BURADA: 
+    # Listede olsun olmasın, Pazar "BIST" ise sonuna .IS ekle!
+    # ----------------------------------------------------
     if "BIST" in pazar:
-        yahoo_symbol = f"{kod}.IS"
+        # Zaten .IS ile bitmiyorsa ekle
+        if not kod.endswith(".IS"):
+            yahoo_symbol = f"{kod}.IS"
         currency = "TL"
     elif "KRIPTO" in pazar:
-        yahoo_symbol = f"{kod}-USD"
+        if not kod.endswith("-USD"):
+            yahoo_symbol = f"{kod}-USD"
     elif "EMTIA" in pazar:
         if "Altın ONS" in kod: yahoo_symbol = "GC=F"
         elif "Gümüş ONS" in kod: yahoo_symbol = "SI=F"
@@ -243,7 +267,6 @@ def fetch_market_data(kod, pazar, usd_try):
 def run_analysis(df, usd_try_rate):
     results = []
     
-    # Eğer DataFrame boşsa hemen boş dön (ama kolonlarla!)
     if df.empty:
         return pd.DataFrame(columns=ANALYSIS_COLS)
         
@@ -253,7 +276,7 @@ def run_analysis(df, usd_try_rate):
         adet = row.get("Adet", 0)
         maliyet = row.get("Maliyet", 0)
         
-        if not kod: continue # Kod yoksa atla
+        if not kod: continue 
 
         curr_price, prev_close, currency = fetch_market_data(kod, pazar, usd_try_rate)
         
@@ -296,13 +319,12 @@ def run_analysis(df, usd_try_rate):
         
     return pd.DataFrame(results)
 
-# --- VERİ HAZIRLIĞI (HATA KORUMALI) ---
+# --- VERİ HAZIRLIĞI ---
 if not portfoy_df.empty:
     master_df = run_analysis(portfoy_df, USD_TRY)
 else:
     master_df = pd.DataFrame(columns=ANALYSIS_COLS)
 
-# Filtreleme yaparken kolonların varlığından emin ol
 if "Tip" in master_df.columns:
     portfoy_only = master_df[master_df["Tip"] == "Portfoy"]
     takip_only = master_df[master_df["Tip"] == "Takip"]
@@ -361,8 +383,7 @@ with tabs[0]: # ÖZET
     else:
         st.info("Henüz portföy oluşturulmadı. 'Ekle/Çıkar' sekmesine gidin.")
 
-# --- FİLTRELEMELER (GÜVENLİ) ---
-# Pazar kolonu kesin var ama boş olabilir, fillna ile garantiye alıyoruz
+# --- FİLTRELEMELER ---
 def safe_filter(df, keyword):
     if df.empty or "Pazar" not in df.columns:
         return pd.DataFrame(columns=ANALYSIS_COLS)
@@ -382,6 +403,7 @@ with tabs[6]:
     else:
         st.info("İzleme listeniz boş.")
 
+# --- EKLEME ÇIKARMA BÖLÜMÜ ---
 with tabs[7]:
     st.header("Varlık Yönetimi")
     tab_ekle, tab_sil = st.tabs(["➕ Ekle", "🗑️ Sil"])
@@ -391,10 +413,13 @@ with tabs[7]:
         yeni_pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()))
         secenekler = MARKET_DATA.get(yeni_pazar, [])
         
+        st.info("💡 İpucu: Listede aradığınız hisse yoksa aşağıya 'Manuel Kod' olarak yazın, sistem otomatik bulur!")
+        
         with st.form("add_asset_form"):
-            yeni_kod = st.selectbox("Varlık", options=secenekler, index=None, placeholder="Seçiniz...")
-            manuel_giris = st.checkbox("Listede Yok")
-            if manuel_giris: yeni_kod = st.text_input("Manuel Kod").upper()
+            yeni_kod = st.selectbox("Listeden Seç", options=secenekler, index=None, placeholder="Seçiniz...")
+            
+            # BURASI ÖNEMLİ: Manuel girişi ayrı bir seçenek gibi değil, her zaman açık bıraktım.
+            manuel_kod = st.text_input("Veya Manuel Yaz (Örn: MEGMT)").upper()
             
             c1, c2 = st.columns(2)
             adet_inp = c1.number_input("Adet", min_value=0.0, step=0.01)
@@ -402,21 +427,24 @@ with tabs[7]:
             not_inp = st.text_input("Not")
             
             if st.form_submit_button("Kaydet", type="primary", use_container_width=True):
-                if yeni_kod:
-                    portfoy_df = portfoy_df[portfoy_df["Kod"] != yeni_kod]
+                # Önce manuel kutuya bak, doluysa onu al. Boşsa listeden seçileni al.
+                final_kod = manuel_kod if manuel_kod else yeni_kod
+                
+                if final_kod:
+                    portfoy_df = portfoy_df[portfoy_df["Kod"] != final_kod]
                     tip_str = "Portfoy" if islem_tipi == "Portföy" else "Takip"
                     yeni_satir = pd.DataFrame({
-                        "Kod": [yeni_kod], "Pazar": [yeni_pazar], 
+                        "Kod": [final_kod], "Pazar": [yeni_pazar], 
                         "Adet": [adet_inp], "Maliyet": [maliyet_inp],
                         "Tip": [tip_str], "Notlar": [not_inp]
                     })
                     portfoy_df = pd.concat([portfoy_df, yeni_satir], ignore_index=True)
                     save_data_to_sheet(portfoy_df)
-                    st.success("Kaydedildi!")
+                    st.success(f"{final_kod} kaydedildi!")
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("Varlık seçmelisiniz.")
+                    st.error("Lütfen bir hisse seçin veya adını yazın.")
 
     with tab_sil:
         if not portfoy_df.empty:
@@ -428,4 +456,3 @@ with tabs[7]:
                 st.rerun()
         else:
             st.info("Listeniz boş.")
-
