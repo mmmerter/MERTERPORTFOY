@@ -8,32 +8,49 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="Portföy ve Takip", layout="wide", page_icon="📈")
 
-# --- CSS STİL AYARLARI (Görsellik) ---
+# --- CSS STİL AYARLARI ---
 st.markdown("""
 <style>
-    [data-testid="stMetricValue"] {
-        font-size: 24px;
-    }
-    .big-font {
-        font-size:20px !important;
-        font-weight: bold;
-    }
+    [data-testid="stMetricValue"] { font-size: 24px; }
+    .big-font { font-size:20px !important; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🌐 Çoklu Varlık Portföy Yöneticisi")
 
+# --- VARLIK LİSTELERİ (AUTOCOMPLETE İÇİN) ---
+# Burayı dilediğin gibi genişletebilirsin.
+MARKET_DATA = {
+    "BIST": [
+        "THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK", "KCHOL", "SAHOL",
+        "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM", "HEKTS", "SASA", "ASTOR", "KONTR"
+    ],
+    "KRIPTO": [
+        "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "SHIB", "DOT", 
+        "MATIC", "LTC", "TRX", "UNI", "ATOM", "LINK", "XLM", "ALGO", "VET", "ICP"
+    ],
+    "EMTIA": [
+        "GC=F", "SI=F", "CL=F", "NG=F", "HG=F", "PL=F", "PA=F", "ZC=F"
+    ],
+    "ABD": [
+        "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "NFLX", "AMD", "INTC"
+    ],
+    "FIZIKI": [
+        "Gram Altın", "Çeyrek Altın", "Cumhuriyet Altın", "Dolar Nakit", "Euro Nakit"
+    ]
+}
+
 # --- SABİTLER VE KUR ---
 SHEET_NAME = "PortfoyData" 
 
-@st.cache_data(ttl=3600) # 1 saatlik önbellek
+@st.cache_data(ttl=3600)
 def get_usd_try():
     try:
         ticker = yf.Ticker("TRY=X")
         hist = ticker.history(period="1d")
         if not hist.empty:
             return hist['Close'].iloc[-1]
-        return 34.0 # Fallback (Hata olursa manuel kur)
+        return 34.0
     except:
         return 34.0
 
@@ -52,11 +69,9 @@ def get_data_from_sheet():
         data = sheet.get_all_records()
         
         if not data:
-            # Standart boş yapı (Tip sütunu eklendi: Portfoy/Takip)
             return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         
         df = pd.DataFrame(data)
-        # Eğer eski veri varsa ve yeni sütunlar yoksa ekle
         if "Tip" not in df.columns: df["Tip"] = "Portfoy"
         if "Notlar" not in df.columns: df["Notlar"] = ""
         
@@ -74,7 +89,7 @@ def save_data_to_sheet(df):
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
-# --- DATA YÜKLEME VE TÜR DÖNÜŞÜMÜ ---
+# --- DATA YÜKLEME ---
 portfoy_df = get_data_from_sheet()
 if not portfoy_df.empty:
     portfoy_df["Adet"] = pd.to_numeric(portfoy_df["Adet"], errors='coerce').fillna(0)
@@ -87,10 +102,28 @@ with st.sidebar:
     
     islem_tipi = st.radio("Kayıt Türü", ["Portföyüme Ekle", "Takip Listesine Ekle"])
     
+    # ⚠️ ÖNEMLİ DEĞİŞİKLİK: Pazar seçimini formun DIŞINA aldık.
+    # Böylece pazar değiştiğinde sayfa yenilenir ve alttaki liste güncellenir.
+    yeni_pazar = st.selectbox("Pazar Seçiniz", ["BIST", "KRIPTO", "ABD", "EMTIA", "FIZIKI"])
+    
+    # Seçilen pazara göre listeyi getir
+    secenekler = MARKET_DATA.get(yeni_pazar, [])
+    
     with st.form("ekle_form", clear_on_submit=True):
-        yeni_pazar = st.selectbox("Pazar", ["KRIPTO", "BIST", "ABD", "EMTIA", "FIZIKI"])
-        yeni_kod = st.text_input("Sembol / Kod (Örn: BTC, THYAO, AAPL, GC=F)").upper()
+        # Text input yerine Selectbox geldi
+        # options=secenekler -> Pazar'a göre değişen liste
+        yeni_kod = st.selectbox(
+            "Varlık Seç (Yazarak Ara)", 
+            options=secenekler,
+            index=None, # Başlangıçta boş gelsin
+            placeholder="Sembolü seçin veya yazın..."
+        )
         
+        # Eğer listede olmayan bir şey girmek isterse diye opsiyonel manuel giriş (İstersen kaldırabilirsin)
+        manuel_kod_giris = st.checkbox("Listede yok, manuel gireceğim")
+        if manuel_kod_giris:
+            yeni_kod = st.text_input("Manuel Kod Giriniz").upper()
+
         if islem_tipi == "Portföyüme Ekle":
             c1, c2 = st.columns(2)
             yeni_adet = c1.number_input("Adet", min_value=0.0, step=0.01)
@@ -107,7 +140,7 @@ with st.sidebar:
         
         if submitted:
             if yeni_kod:
-                # Aynı kod varsa silip yenisini ekleyelim (Update mantığı)
+                # Update veya Insert mantığı
                 portfoy_df = portfoy_df[portfoy_df["Kod"] != yeni_kod]
                 
                 yeni_veri = pd.DataFrame({
@@ -121,7 +154,7 @@ with st.sidebar:
                 time.sleep(1)
                 st.rerun()
             else:
-                st.warning("Lütfen bir kod girin.")
+                st.warning("Lütfen bir varlık seçin.")
 
     st.divider()
     st.subheader("🗑️ Sil")
@@ -136,13 +169,14 @@ with st.sidebar:
 def sembol_getir(kod, pazar):
     if pazar == "BIST": return f"{kod}.IS"
     elif pazar == "KRIPTO": return f"{kod}-USD"
-    elif pazar == "EMTIA": return kod # GC=F (Gold), SI=F (Silver) gibi girilmeli
-    else: return kod # ABD ve Fiziki (Eğer ticker varsa)
+    elif pazar == "EMTIA": 
+        # Yahoo Finance kodları ile eşleştirme
+        if "Altın" in kod and "Ons" not in kod: return "GC=F" # Basit eşleştirme
+        return kod 
+    else: return kod
 
 def veri_analizi(df, usd_try_rate):
     analiz_listesi = []
-    toplam_varlik_tl = 0
-    toplam_maliyet_tl = 0
     
     prog_bar = st.progress(0)
     status_text = st.empty()
@@ -155,37 +189,27 @@ def veri_analizi(df, usd_try_rate):
         fiyat = 0
         para_birimi = "TL" if row["Pazar"] == "BIST" else "USD"
         
-        # Fiziki varlıklar için manuel fiyat veya sembol
         if row["Pazar"] == "FIZIKI":
-            # Fiziki için basitçe manuel maliyet = fiyat varsayıyoruz şimdilik
-            # İleride manuel güncelleme ekranı eklenebilir
-            # Şimdilik altına endeksli varsayalım
             fiyat = row["Maliyet"] 
         else:
             try:
                 ticker = yf.Ticker(sym)
-                # Hızlı veri çekimi için fast_info veya history
-                # Kripto 7/24 olduğu için history daha güvenli
                 hist = ticker.history(period="1d")
                 if not hist.empty:
                     fiyat = hist['Close'].iloc[-1]
                 else:
-                    # Veri gelmezse maliyeti referans al (hata önleme)
                     fiyat = row["Maliyet"]
             except:
                 fiyat = row["Maliyet"]
 
-        # Hesaplamalar
         adet = row["Adet"]
         maliyet = row["Maliyet"]
         guncel_deger = fiyat * adet
         toplam_maliyet = maliyet * adet
         
-        # PNL Hesapla
         pnl = guncel_deger - toplam_maliyet
         pnl_yuzde = (pnl / toplam_maliyet * 100) if toplam_maliyet > 0 else 0
         
-        # Ana Dashboard için TL Karşılıkları
         if para_birimi == "USD":
             tl_deger = guncel_deger * usd_try_rate
             tl_maliyet = toplam_maliyet * usd_try_rate
@@ -204,8 +228,8 @@ def veri_analizi(df, usd_try_rate):
             "Varlık Değeri": guncel_deger,
             "P/L": pnl,
             "P/L %": pnl_yuzde,
-            "TL Değer": tl_deger,       # Dashboard İçin
-            "TL Maliyet": tl_maliyet,   # Dashboard İçin
+            "TL Değer": tl_deger,
+            "TL Maliyet": tl_maliyet,
             "Notlar": row["Notlar"]
         })
         
@@ -214,18 +238,13 @@ def veri_analizi(df, usd_try_rate):
     return pd.DataFrame(analiz_listesi)
 
 # --- ANA EKRAN VE SEKMELER ---
-
 if portfoy_df.empty:
     st.info("Sol menüden portföyünüze veya takip listenize varlık ekleyin.")
 else:
-    # Tüm veriyi analiz et
     master_df = veri_analizi(portfoy_df, USD_TRY)
-    
-    # Filtreler
     portfoy_only = master_df[master_df["Tip"] == "Portfoy"]
     takip_only = master_df[master_df["Tip"] == "Takip"]
 
-    # Sekmeler
     tab_ozet, tab_kripto, tab_bist, tab_abd, tab_emtia, tab_fiziki, tab_takip = st.tabs([
         "🏠 Genel Özet", "₿ Kripto", "📈 BIST", "🇺🇸 ABD", "🛢️ Emtia", "🏠 Fiziki", "👀 Takip Listesi"
     ])
@@ -238,15 +257,12 @@ else:
             genel_kar = toplam_varlik - toplam_maliyet
             genel_yuzde = (genel_kar / toplam_maliyet * 100) if toplam_maliyet > 0 else 0
 
-            # KARTLAR
             c1, c2, c3 = st.columns(3)
             c1.metric("Toplam Varlık (TL)", f"₺{toplam_varlik:,.2f}")
             c2.metric("Toplam Maliyet (TL)", f"₺{toplam_maliyet:,.2f}")
             c3.metric("Genel Kâr/Zarar (TL)", f"₺{genel_kar:,.2f}", delta=f"%{genel_yuzde:.2f}")
             
             st.divider()
-            
-            # PASTA GRAFİĞİ (Varlık Dağılımı)
             st.subheader("Varlık Dağılımı")
             pazar_gruplu = portfoy_only.groupby("Pazar")["TL Değer"].sum().reset_index()
             st.bar_chart(pazar_gruplu, x="Pazar", y="TL Değer", color="#4CAF50")
@@ -259,74 +275,40 @@ else:
             st.info("Bu kategoride varlık yok.")
             return
         
-        # Metrikler
         sub_val = df_subset["Varlık Değeri"].sum()
-        sub_cost = (df_subset["Adet"] * df_subset["Ort. Maliyet"]).sum()
-        sub_pnl = sub_val - sub_cost
+        sub_pnl = sub_val - (df_subset["Adet"] * df_subset["Ort. Maliyet"]).sum()
         
         k1, k2, k3 = st.columns(3)
         k1.metric(f"Toplam Değer ({currency_symbol})", f"{sub_val:,.2f}")
         k3.metric(f"Kâr/Zarar ({currency_symbol})", f"{sub_pnl:,.2f}", delta_color="normal")
         
-        # Tablo Düzeni
         display_df = df_subset[[
             "Kod", "Adet", "Ort. Maliyet", "Anlık Fiyat", 
             "Varlık Değeri", "P/L", "P/L %", "Notlar"
         ]].copy()
         
-        # Renklendirme Fonksiyonu
         def color_pnl(val):
             color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
             return f'color: {color}'
 
         st.dataframe(
             display_df.style.format({
-                "Ort. Maliyet": "{:.2f}",
-                "Anlık Fiyat": "{:.2f}",
-                "Varlık Değeri": "{:.2f}",
-                "P/L": "{:.2f}",
-                "P/L %": "{:.2f}%"
+                "Ort. Maliyet": "{:.2f}", "Anlık Fiyat": "{:.2f}",
+                "Varlık Değeri": "{:.2f}", "P/L": "{:.2f}", "P/L %": "{:.2f}%"
             }).applymap(color_pnl, subset=['P/L', 'P/L %'])
         )
 
-    # --- TAB 2: KRIPTO ---
-    with tab_kripto:
-        df_sub = portfoy_only[portfoy_only["Pazar"] == "KRIPTO"]
-        create_asset_table(df_sub, "$")
-
-    # --- TAB 3: BIST ---
-    with tab_bist:
-        df_sub = portfoy_only[portfoy_only["Pazar"] == "BIST"]
-        create_asset_table(df_sub, "₺")
-
-    # --- TAB 4: ABD ---
-    with tab_abd:
-        df_sub = portfoy_only[portfoy_only["Pazar"] == "ABD"]
-        create_asset_table(df_sub, "$")
-        st.caption("*Hesaplamalar USD bazındadır. Genel Özet sayfasında TL'ye çevrilir.*")
-
-    # --- TAB 5: EMTIA ---
-    with tab_emtia:
-        st.info("Altın/Gümüş için 'GC=F' (Altın), 'SI=F' (Gümüş) kodlarını kullanın.")
-        df_sub = portfoy_only[portfoy_only["Pazar"] == "EMTIA"]
-        create_asset_table(df_sub, "$")
-
-    # --- TAB 6: FIZIKI ---
-    with tab_fiziki:
-        st.warning("Fiziki varlıklar için manuel giriş yapılabilir. Fiyatlar otomatik güncellenmez.")
-        df_sub = portfoy_only[portfoy_only["Pazar"] == "FIZIKI"]
-        create_asset_table(df_sub, "Birim")
-
-    # --- TAB 7: TAKİP LİSTESİ ---
+    with tab_kripto: create_asset_table(portfoy_only[portfoy_only["Pazar"] == "KRIPTO"], "$")
+    with tab_bist: create_asset_table(portfoy_only[portfoy_only["Pazar"] == "BIST"], "₺")
+    with tab_abd: create_asset_table(portfoy_only[portfoy_only["Pazar"] == "ABD"], "$")
+    with tab_emtia: create_asset_table(portfoy_only[portfoy_only["Pazar"] == "EMTIA"], "$")
+    with tab_fiziki: create_asset_table(portfoy_only[portfoy_only["Pazar"] == "FIZIKI"], "Birim")
+    
     with tab_takip:
         st.header("👀 İzleme Listesi")
         if not takip_only.empty:
-            # Takip listesi için basitleştirilmiş tablo
             watch_df = takip_only[["Kod", "Pazar", "Anlık Fiyat", "Para Birimi", "Notlar"]].copy()
-            st.dataframe(
-                watch_df.style.format({"Anlık Fiyat": "{:.2f}"})
-            )
-            st.caption("Takip listesindeki varlıklarınızı 'Ekle' menüsünden 'Portföyüme Ekle' diyerek cüzdanınıza taşıyabilirsiniz.")
+            st.dataframe(watch_df.style.format({"Anlık Fiyat": "{:.2f}"}))
         else:
-            st.info("Takip listeniz boş. Yan menüden 'Takip Listesine Ekle' seçeneği ile varlık ekleyebilirsiniz.")
+            st.info("Takip listeniz boş.")
 
