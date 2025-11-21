@@ -45,7 +45,7 @@ with c_toggle:
 # Burası sekmelerin yerine geçecek.
 selected = option_menu(
     menu_title=None,  # Başlık yok
-    options=["Dashboard", "Tümü", "BIST", "ABD", "Emtia", "Fiziki", "Kripto","İzleme", "Ekle/Çıkar"], 
+    options=["Dashboard", "Tümü", "BIST", "ABD", "Emtia", "Fiziki", "Kripto", "İzleme", "Ekle/Çıkar"], 
     icons=["speedometer2", "list-task", "graph-up-arrow", "currency-dollar", "currency-bitcoin", "fuel-pump", "house", "eye", "gear"], 
     menu_icon="cast", 
     default_index=0, 
@@ -337,3 +337,4 @@ elif selected == "Ekle/Çıkar":
                 save_data_to_sheet(portfoy_df)
                 st.success("Silindi.")
                 st.rerun()
+
