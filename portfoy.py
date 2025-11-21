@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="Merter’in Portföy Motoru", 
     layout="wide", 
     page_icon="🚀",
-    initial_sidebar_state="collapsed" # Yan menüyü kapalı başlat
+    initial_sidebar_state="collapsed"
 )
 
 # --- CSS: MOBİL İÇİN ÖZEL AYARLAR ---
@@ -32,7 +32,6 @@ st.markdown("""
         padding: 10px;
         text-align: center;
     }
-    /* Sekmeleri mobilde kaydırılabilir yap */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         flex-wrap: wrap; 
@@ -70,23 +69,24 @@ MARKET_DATA = {
         "TURSG", "ULKER", "VAKBN", "VESBE", "ZOREN", "ADEL", "ADESE", "AGROT", "AKCNS", "AKSGY",
         "ALGYO", "ALKIM", "ANACM", "ANELE", "ANGEN", "ANHYT", "ANSGR", "ARASE", "ARDYZ", "ARENA",
         "ARSAN", "ATAGY", "ATAKP", "AVGYO", "AVHOL", "AVOD", "AYEN", "AYES", "AYGAZ", "AZTEK",
-        "BJKAS", "BOBET", "BOSSA", "BRISA", "BSOKE", "BTCIM", "CEOEM", "CONSE", "COSMO", "DARDL",
-        "EBEBK", "EKSUN", "ELITE", "EMKEL", "ERBOS", "ESEN", "ESCOM", "FORTE", "GEDIK", "GOKNR",
-        "GOLTS", "GOODY", "GOZDE", "GRSEL", "HEDEF", "HKTM", "HLGYO", "HUNER", "IHLAS", "IHLGM",
-        "INFO", "INVES", "IPEKE", "ISFIN", "ISGSY", "ISKPL", "JANTS", "KAREL", "KARSN", "KARTN",
-        "KATMR", "KAYSE", "KFEIN", "KGYO", "KLKIM", "KLMSN", "KNFRT", "KONYA", "KOPOL", "KRGYO",
-        "KRONT", "KRPLS", "KSTUR", "KUTPO", "LIDER", "LOGO", "LUKSK", "MAKIM", "MANAS", "MARBL",
-        "MEDTR", "MERCN", "METRO", "MOBTL", "MPARK", "MRGYO", "NATEN", "NETAS", "NUGYO", "NUHCM",
-        "OFSYM", "ONCSM", "ORCAY", "ORGE", "OSMEN", "OSTIM", "OTTO", "OZKGY", "OZRDN", "OZSUB",
-        "PAGYO", "PAMEL", "PAPIL", "PARSN", "PCILT", "PEKGY", "PENGD", "PETUN", "PINSU", "PKART",
-        "PNLSN", "PNSUT", "POLHO", "POLTK", "PRDGS", "PRKAB", "PRKME", "RNPOL", "RYGYO", "RYSAS",
-        "SANEL", "SANKO", "SARKY", "SAYAS", "SEKFK", "SEKUR", "SELGD", "SELVA", "SEYKM", "SILVR",
-        "SKTAS", "SMART", "SNGYO", "SNKRN", "SNPAM", "SODSN", "SOKE", "SONME", "SRVGY", "SUMAS",
-        "SUNTK", "SUWEN", "TABGD", "TARKM", "TBORG", "TDGYO", "TEKTU", "TERA", "TETMT", "TEZOL",
-        "TGSAS", "TLMAN", "TMPOL", "TNZTP", "TRCAS", "TRGYO", "TRILC", "TSGYO", "TUCLK", "TUKAS",
-        "TURGG", "UFUK", "ULAS", "ULUFA", "ULUSE", "ULUUN", "UMPAS", "UNLU", "USAK", "UZERB",
-        "VAKFN", "VAKKO", "VANGD", "VBTYZ", "VERTU", "VERUS", "VKFYO", "VKGYO", "VKING", "YAPRK",
-        "YATAS", "YAYLA", "YESIL", "YGGYO", "YGYO", "YKSLN", "YONGA", "YUNSA", "YYAPI", "ZEDUR"
+        "BJKAS", "BOBET", "BOSSA", "BRISA", "BRKO", "BRKSN", "BRKVY", "BRLSM", "BRMEN", "BRSAN",
+        "BRYAT", "BSOKE", "BTCIM", "CEOEM", "CONSE", "COSMO", "DARDL", "EBEBK", "EKSUN", "ELITE", 
+        "EMKEL", "ERBOS", "ESEN", "ESCOM", "FORTE", "GEDIK", "GOKNR", "GOLTS", "GOODY", "GOZDE", 
+        "GRSEL", "HEDEF", "HKTM", "HLGYO", "HUNER", "IHLAS", "IHLGM", "INFO", "INVES", "IPEKE", 
+        "ISFIN", "ISGSY", "ISKPL", "JANTS", "KAREL", "KARSN", "KARTN", "KATMR", "KAYSE", "KFEIN", 
+        "KGYO", "KLKIM", "KLMSN", "KNFRT", "KONYA", "KOPOL", "KRGYO", "KRONT", "KRPLS", "KSTUR", 
+        "KUTPO", "LIDER", "LOGO", "LUKSK", "MAKIM", "MANAS", "MARBL", "MEDTR", "MERCN", "METRO", 
+        "MOBTL", "MPARK", "MRGYO", "NATEN", "NETAS", "NUGYO", "NUHCM", "OFSYM", "ONCSM", "ORCAY", 
+        "ORGE", "OSMEN", "OSTIM", "OTTO", "OZKGY", "OZRDN", "OZSUB", "PAGYO", "PAMEL", "PAPIL", 
+        "PARSN", "PCILT", "PEKGY", "PENGD", "PETUN", "PINSU", "PKART", "PNLSN", "PNSUT", "POLHO", 
+        "POLTK", "PRDGS", "PRKAB", "PRKME", "RNPOL", "RYGYO", "RYSAS", "SANEL", "SANKO", "SARKY", 
+        "SAYAS", "SEKFK", "SEKUR", "SELGD", "SELVA", "SEYKM", "SILVR", "SKTAS", "SMART", "SNGYO", 
+        "SNKRN", "SNPAM", "SODSN", "SOKE", "SONME", "SRVGY", "SUMAS", "SUNTK", "SUWEN", "TABGD", 
+        "TARKM", "TBORG", "TDGYO", "TEKTU", "TERA", "TETMT", "TEZOL", "TGSAS", "TLMAN", "TMPOL", 
+        "TNZTP", "TRCAS", "TRGYO", "TRILC", "TSGYO", "TUCLK", "TUKAS", "TURGG", "UFUK", "ULAS", 
+        "ULUFA", "ULUSE", "ULUUN", "UMPAS", "UNLU", "USAK", "UZERB", "VAKFN", "VAKKO", "VANGD", 
+        "VBTYZ", "VERTU", "VERUS", "VKFYO", "VKGYO", "VKING", "YAPRK", "YATAS", "YAYLA", "YESIL", 
+        "YGGYO", "YGYO", "YKSLN", "YONGA", "YUNSA", "YYAPI", "ZEDUR"
     ],
     "ABD (S&P + NASDAQ)": [
         "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "BRK-B", "LLY", "V", "TSM", "UNH", 
@@ -94,19 +94,19 @@ MARKET_DATA = {
         "COST", "ADBE", "CSCO", "MCD", "CRM", "DIS", "NKE", "WFC", "BAC", "VZ", "QCOM", "IBM", 
         "BA", "GE", "PLTR", "COIN", "PYPL", "UBER", "ABNB", "AMD", "INTC", "NFLX", "TMUS", "CMCSA",
         "TXN", "HON", "AMGN", "INTU", "SBUX", "GILD", "MDLZ", "BKNG", "ADI", "ISRG", "ADP", "LRCX",
-        "REGN", "VRTX", "FISV", "KLAC", "SNPS", "CDNS", "MAR", "CSX", "PANW", "ORLY", 
-        "MNST", "FTNT", "AEP", "CTAS", "KDP", "DXCM", "PAYX", "ODFL", "MCHP", "AIG", "ALL", "AXP",
-        "BK", "BLK", "C", "CAT", "CL", "COF", "COP", "CVS", "D", "DE", "DHR", "DOW", "DUK", "EMR",
-        "EXC", "F", "FDX", "GD", "GM", "GS", "HAL", "HPQ", "KR", "KMI", "LMT", "LOW", "MMM", "MET",
-        "MO", "MS", "NEE", "NOC", "OXY", "PCG", "PFE", "PM", "PSX", "RTX", "SLB", "SO", "SPG", "T",
-        "TGT", "TRV", "USB", "UPS", "WBA", "WMB", "ASML", "AZN", "LTC", "SHOP", "SONY", "TM"
+        "REGN", "VRTX", "FISV", "KLAC", "SNPS", "CDNS", "MAR", "CSX", "PANW", "ORLY", "MNST", "FTNT", 
+        "AEP", "CTAS", "KDP", "DXCM", "PAYX", "ODFL", "MCHP", "AIG", "ALL", "AXP", "BK", "BLK", "C", 
+        "CAT", "CL", "COF", "COP", "CVS", "D", "DE", "DHR", "DOW", "DUK", "EMR", "EXC", "F", "FDX", 
+        "GD", "GM", "GS", "HAL", "HPQ", "KR", "KMI", "LMT", "LOW", "MMM", "MET", "MO", "MS", "NEE", 
+        "NOC", "OXY", "PCG", "PFE", "PM", "PSX", "RTX", "SLB", "SO", "SPG", "T", "TGT", "TRV", "USB", 
+        "UPS", "WBA", "WMB", "ASML", "AZN", "LTC", "SHOP", "SONY", "TM"
     ],
     "KRIPTO": [
-        "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "SHIB", "DOT", 
-        "MATIC", "LTC", "TRX", "UNI", "ATOM", "LINK", "XLM", "ALGO", "VET", "ICP",
-        "NEAR", "FIL", "HBAR", "APT", "QNT", "LDO", "ARB", "OP", "RNDR", "GRT",
-        "STX", "SAND", "EOS", "MANA", "THETA", "AAVE", "AXS", "FTM", "FLOW", "CHZ",
-        "PEPE", "FLOKI", "GALA", "MINA", "SUI", "INJ", "RUNE", "KAS", "IMX", "SNX"
+        "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "SHIB", "DOT", "MATIC", "LTC", 
+        "TRX", "UNI", "ATOM", "LINK", "XLM", "ALGO", "VET", "ICP", "NEAR", "FIL", "HBAR", "APT", 
+        "QNT", "LDO", "ARB", "OP", "RNDR", "GRT", "STX", "SAND", "EOS", "MANA", "THETA", "AAVE", 
+        "AXS", "FTM", "FLOW", "CHZ", "PEPE", "FLOKI", "GALA", "MINA", "SUI", "INJ", "RUNE", "KAS", 
+        "IMX", "SNX"
     ],
     "EMTIA": [
         "Gram Altın (TL)", "Gram Gümüş (TL)", "Altın ONS ($)", "Gümüş ONS ($)", 
@@ -165,12 +165,8 @@ if not portfoy_df.empty:
     portfoy_df["Adet"] = pd.to_numeric(portfoy_df["Adet"], errors='coerce').fillna(0)
     portfoy_df["Maliyet"] = pd.to_numeric(portfoy_df["Maliyet"], errors='coerce').fillna(0)
 
-# --- DATA MOTORU (FİYAT + ÖNCEKİ KAPANIŞ) ---
+# --- DATA MOTORU ---
 def fetch_market_data(kod, pazar, usd_try):
-    """
-    Hem güncel fiyatı hem de bir önceki kapanışı çeker (Günlük P/L için).
-    """
-    # --- 1. EŞLEŞTİRME ---
     yahoo_symbol = kod
     currency = "USD"
     
@@ -188,7 +184,7 @@ def fetch_market_data(kod, pazar, usd_try):
         elif "Platin" in kod: yahoo_symbol = "PL=F"
         elif "Paladyum" in kod: yahoo_symbol = "PA=F"
     
-    # --- 2. ÖZEL GRAM HESABI ---
+    # Özel Gram Hesaplama
     if "Gram Altın (TL)" in kod:
         try:
             hist = yf.Ticker("GC=F").history(period="5d")
@@ -196,7 +192,7 @@ def fetch_market_data(kod, pazar, usd_try):
             ons_now = hist['Close'].iloc[-1]
             ons_prev = hist['Close'].iloc[-2]
             gram_now = (ons_now * usd_try) / 31.1035
-            gram_prev = (ons_prev * usd_try) / 31.1035 # Dolar sabit varsayımıyla yaklaşık değişim
+            gram_prev = (ons_prev * usd_try) / 31.1035 
             return gram_now, gram_prev, "TL"
         except: return 0, 0, "TL"
 
@@ -211,55 +207,39 @@ def fetch_market_data(kod, pazar, usd_try):
             return gram_now, gram_prev, "TL"
         except: return 0, 0, "TL"
         
-    # --- 3. NORMAL VARLIKLAR ---
     try:
         if "FIZIKI" in pazar: return 0, 0, "TL"
-        
         ticker = yf.Ticker(yahoo_symbol)
-        # Son 5 gün alalım ki hafta sonu vs. sorun olmasın
         hist = ticker.history(period="5d")
-        
         if hist.empty: return 0, 0, currency
-        
         current_price = hist['Close'].iloc[-1]
-        # Eğer veri varsa bir önceki kapanışı al, yoksa bugünü al
         prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
-        
         return current_price, prev_close, currency
     except:
         return 0, 0, currency
 
-# --- ANALİZ FONKSİYONU ---
+# --- ANALİZ ---
 def run_analysis(df, usd_try_rate):
     results = []
-    # Mobilde progress bar bazen donuyor, bu yüzden sadece spinner
-    # st.spinner("Fiyatlar güncelleniyor...") 
-    
     for i, row in df.iterrows():
         kod, pazar, adet, maliyet = row["Kod"], row["Pazar"], row["Adet"], row["Maliyet"]
-        
         curr_price, prev_close, currency = fetch_market_data(kod, pazar, usd_try_rate)
         
         if curr_price == 0 and "FIZIKI" not in pazar:
-            curr_price = maliyet # Hata varsa maliyet göster
+            curr_price = maliyet 
             prev_close = maliyet
         elif "FIZIKI" in pazar:
-            curr_price = maliyet # Fiziki için manuel
+            curr_price = maliyet 
             prev_close = maliyet
 
         val_now = curr_price * adet
         cost_total = maliyet * adet
-        
-        # Toplam P/L
         total_pnl = val_now - cost_total
         total_pnl_pct = (total_pnl / cost_total * 100) if cost_total > 0 else 0
-        
-        # Günlük P/L
         daily_change = curr_price - prev_close
         daily_pnl = daily_change * adet
         daily_pnl_pct = (daily_change / prev_close * 100) if prev_close > 0 else 0
         
-        # TL Çevrimleri (Dashboard için)
         if currency == "USD":
             val_tl = val_now * usd_try_rate
             cost_tl = cost_total * usd_try_rate
@@ -280,30 +260,34 @@ def run_analysis(df, usd_try_rate):
         })
     return pd.DataFrame(results)
 
-# --- ARAYÜZ: SEKMELER (TABS) ---
-# Sidebar yerine en tepede sekmeler
-tabs = st.tabs([
-    "📊 Özet", "📈 BIST", "🇺🇸 ABD", "₿ Kripto", 
-    "🛢️ Emtia", "🏠 Fiziki", "👀 İzleme", "⚙️ Ekle/Çıkar"
-])
+# --- 🔴 KRİTİK HATA DÜZELTMESİ BURADA ---
+# Veri olsa da olmasa da bu kolonlara sahip boş DataFrame'ler oluşturulmalı.
+col_names = ["Kod", "Pazar", "Tip", "Adet", "Maliyet", "Fiyat", "Önceki", "PB", 
+             "Değer", "Top. P/L", "Top. %", "Gün. P/L", "Gün. %", 
+             "TL Değer", "TL Maliyet", "TL Gün P/L", "Notlar"]
 
-# Veri Analizi (Eğer veri varsa)
 if not portfoy_df.empty:
     master_df = run_analysis(portfoy_df, USD_TRY)
     portfoy_only = master_df[master_df["Tip"] == "Portfoy"]
     takip_only = master_df[master_df["Tip"] == "Takip"]
 else:
-    master_df = pd.DataFrame()
-    portfoy_only = pd.DataFrame()
-    takip_only = pd.DataFrame()
+    # Boş olsa bile kolonları tanımlı oluşturuyoruz ki 'KeyError' almayalım
+    master_df = pd.DataFrame(columns=col_names)
+    portfoy_only = pd.DataFrame(columns=col_names)
+    takip_only = pd.DataFrame(columns=col_names)
 
-# --- FONKSİYON: TABLO & METRİK GÖSTERİCİ ---
+# --- SEKMELER ---
+tabs = st.tabs([
+    "📊 Özet", "📈 BIST", "🇺🇸 ABD", "₿ Kripto", 
+    "🛢️ Emtia", "🏠 Fiziki", "👀 İzleme", "⚙️ Ekle/Çıkar"
+])
+
 def render_category_tab(df_sub, currency_sym):
+    # Burada df_sub boş gelse bile columns olduğu için filtreleme hata vermez
     if df_sub.empty:
         st.info("Bu kategoride varlık bulunamadı.")
         return
 
-    # 1. ÖZET METRİKLER (Mobilde Yan Yana 2'li Sığar)
     toplam_deger = df_sub["Değer"].sum()
     toplam_kar = df_sub["Top. P/L"].sum()
     gunluk_kar = df_sub["Gün. P/L"].sum()
@@ -312,28 +296,20 @@ def render_category_tab(df_sub, currency_sym):
     c1.metric("Toplam Varlık", f"{currency_sym}{toplam_deger:,.0f}")
     c2.metric("Toplam Kâr/Zarar", f"{currency_sym}{toplam_kar:,.0f}", 
               delta_color="normal", delta=f"{toplam_kar:,.0f}")
-    
-    st.metric("Bugünkü Değişim (Günlük P/L)", f"{currency_sym}{gunluk_kar:,.0f}", 
+    st.metric("Bugünkü Değişim", f"{currency_sym}{gunluk_kar:,.0f}", 
               delta=f"{gunluk_kar:,.0f}", delta_color="normal")
-    
     st.divider()
     
-    # 2. DETAYLI KARTLAR (TABLO YERİNE EXPANDER - MOBİL İÇİN)
-    # Mobilde tablo sağa sola kaydırma ister, expander daha rahattır.
     for i, row in df_sub.iterrows():
         with st.expander(f"**{row['Kod']}** | {row['Fiyat']:.2f} {row['PB']} ({row['Gün. %']:+.2f}%)"):
             col_a, col_b = st.columns(2)
             col_a.write(f"**Adet:** {row['Adet']}")
             col_b.write(f"**Maliyet:** {row['Maliyet']:.2f}")
-            
             col_c, col_d = st.columns(2)
             col_c.write(f"**Değer:** {row['Değer']:,.0f}")
             col_d.write(f"**Kâr:** {row['Top. P/L']:,.0f} ({row['Top. %']:+.1f}%)")
-            
-            if row['Notlar']:
-                st.caption(f"Not: {row['Notlar']}")
+            if row['Notlar']: st.caption(f"Not: {row['Notlar']}")
 
-# --- TAB 1: GENEL ÖZET (TOTAL) ---
 with tabs[0]:
     if not portfoy_only.empty:
         total_assets_tl = portfoy_only["TL Değer"].sum()
@@ -343,25 +319,23 @@ with tabs[0]:
         col1, col2 = st.columns(2)
         col1.metric("Toplam Varlık (TL)", f"₺{total_assets_tl:,.0f}")
         col2.metric("Genel Kâr (TL)", f"₺{total_pl_tl:,.0f}", delta=f"{total_pl_tl:,.0f}")
-        
         st.metric("Günlük Değişim (TL)", f"₺{daily_pl_tl:,.0f}", delta=f"{daily_pl_tl:,.0f}")
-        
         st.divider()
         st.subheader("Varlık Dağılımı")
-        # Mobilde grafiklerin taşmaması için use_container_width önemli
         chart_data = portfoy_only.groupby("Pazar")["TL Değer"].sum()
         st.bar_chart(chart_data, color="#4CAF50", use_container_width=True)
     else:
         st.info("Henüz portföy oluşturulmadı. 'Ekle/Çıkar' sekmesine gidin.")
 
-# --- DİĞER TABLAR ---
-with tabs[1]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("BIST")], "₺")
-with tabs[2]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("ABD")], "$")
-with tabs[3]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("KRIPTO")], "$")
-with tabs[4]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("EMTIA")], "")
-with tabs[5]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("FIZIKI")], "")
+# --- DİĞER TABLAR (ARTIK HATA VERMEYECEK) ---
+# Filtrelemeler artık güvenli çünkü 'portfoy_only' boş olsa bile 'Pazar' sütunu var.
+with tabs[1]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("BIST", na=False)], "₺")
+with tabs[2]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("ABD", na=False)], "$")
+with tabs[3]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("KRIPTO", na=False)], "$")
+with tabs[4]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("EMTIA", na=False)], "")
+with tabs[5]: render_category_tab(portfoy_only[portfoy_only["Pazar"].str.contains("FIZIKI", na=False)], "")
 
-with tabs[6]: # İZLEME LİSTESİ
+with tabs[6]:
     if not takip_only.empty:
         st.subheader("👀 İzleme Listesi")
         for i, row in takip_only.iterrows():
@@ -369,10 +343,8 @@ with tabs[6]: # İZLEME LİSTESİ
     else:
         st.info("İzleme listeniz boş.")
 
-# --- TAB 7: AYARLAR / EKLE ÇIKAR (FORM BURADA) ---
 with tabs[7]:
     st.header("Varlık Yönetimi")
-    
     tab_ekle, tab_sil = st.tabs(["➕ Ekle", "🗑️ Sil"])
     
     with tab_ekle:
@@ -383,8 +355,7 @@ with tabs[7]:
         with st.form("add_asset_form"):
             yeni_kod = st.selectbox("Varlık", options=secenekler, index=None, placeholder="Seçiniz...")
             manuel_giris = st.checkbox("Listede Yok")
-            if manuel_giris:
-                yeni_kod = st.text_input("Manuel Kod").upper()
+            if manuel_giris: yeni_kod = st.text_input("Manuel Kod").upper()
             
             c1, c2 = st.columns(2)
             adet_inp = c1.number_input("Adet", min_value=0.0, step=0.01)
@@ -393,7 +364,6 @@ with tabs[7]:
             
             if st.form_submit_button("Kaydet", type="primary", use_container_width=True):
                 if yeni_kod:
-                    # Eski kaydı silip yenisini ekleyerek güncelleme mantığı
                     portfoy_df = portfoy_df[portfoy_df["Kod"] != yeni_kod]
                     tip_str = "Portfoy" if islem_tipi == "Portföy" else "Takip"
                     yeni_satir = pd.DataFrame({
@@ -419,3 +389,4 @@ with tabs[7]:
                 st.rerun()
         else:
             st.info("Listeniz boş.")
+
