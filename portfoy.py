@@ -121,38 +121,64 @@ def get_yahoo_symbol(kod, pazar):
     return kod 
 
 # --- ZIRHLI SAYI ÇEVİRİCİ (GELİŞMİŞ) ---
-def smart_parse(x):
+def smart_parse(val):
     """
-    30,26 / 3.600,94 / 8,523 / 119 gibi bütün formatları düzgün float'a çevirir.
+    Kullanıcı girişlerinde (adet, maliyet, fiyat) hem TR hem EN formatlarını
+    otomatik doğru float'a çeviren son, stabil sürüm.
     """
-    if x is None:
+
+    if val is None:
         return 0.0
 
-    val = str(x).strip()
-    if val == "":
+    text = str(val).strip()
+    if text == "":
         return 0.0
 
-    # Sadece rakam, virgül, nokta kalsın
-    val = re.sub(r"[^\d,\.]", "", val)
+    # Tamamen sayısal ise direkt dön
+    if text.replace(".", "").replace(",", "").isdigit():
+        # TR formatı (virgül ondalık)
+        if "," in text and "." not in text:
+            text = text.replace(",", ".")
+        return float(text.replace(",", "").replace(" ", ""))
 
-    # Örn: 8,523  → 8523 (virgül binlik, son parça 3 haneli & nokta yok)
-    if "," in val and val.count(",") == 1 and "." not in val:
-        parts = val.split(",")
-        if len(parts[-1]) == 3:
-            val = val.replace(",", "")
+    # 1) Hem nokta hem virgül varsa (örn: 1.234,56 veya 1,234.56)
+    if "." in text and "," in text:
+        # Önce binlik ayırıcıyı kaldır
+        if text.find(".") < text.find(","):
+            # format: 1.234,56 → 1234.56
+            text = text.replace(".", "").replace(",", ".")
+        else:
+            # format: 1,234.56 → 1234.56
+            text = text.replace(",", "")
+        try:
+            return float(text)
+        except:
+            return 0.0
 
-    # Örn: 30,26 → 30.26  (virgül ondalık)
-    if "," in val and "." not in val:
-        val = val.replace(",", ".")
+    # 2) Sadece virgül varsa → TR ondalık
+    if "," in text and "." not in text:
+        return float(text.replace(".", "").replace(",", "."))
 
-    # Örn: 3.600,94 → 3600.94
-    if val.count(".") > 1 and "," in val:
-        val = val.replace(".", "").replace(",", ".")
+    # 3) Sadece nokta varsa → iki olasılık var:
+    #  - 1.023 (muhtemelen 1.023 = 1.023 değil → 1.023 = 1 nokta 023? hayır!)
+    # 1000'den küçükse ondalık kabul et
+    if "." in text:
+        try:
+            as_float = float(text)
+            if as_float < 1000:
+                return as_float
+            else:
+                # 1.234 → 1234
+                return float(text.replace(".", ""))
+        except:
+            pass
 
+    # fallback
     try:
-        return float(val)
+        return float(text)
     except:
         return 0.0
+
 
 # --- TEFAS FON VERİSİ ---
 @st.cache_data(ttl=14400) 
@@ -892,6 +918,7 @@ elif selected == "Ekle/Çıkar":
                         time.sleep(1)
                         st.rerun()
         else: st.info("İşlem yapılacak varlık yok.")
+
 
 
 
