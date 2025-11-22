@@ -59,8 +59,8 @@ def render_pie_bar_charts(df: pd.DataFrame, group_col: str, all_tab: bool = Fals
         plot_df["_pct"] = 0
 
     # Yazı eşiği:
-    # - Tümü sekmesi (all_tab=True)    -> sadece %5 ve üstü
-    # - Diğer tüm sekmeler (all_tab=False) -> hepsi
+    # - Tümü sekmesi (all_tab=True)          -> sadece %5 ve üstü
+    # - Diğer sekmeler (all_tab=False)       -> hepsi
     threshold = 5.0 if all_tab else 0.0
 
     texts = []
@@ -173,10 +173,11 @@ def render_pazar_tab(df, filter_key, symb, usd_try):
     else:
         total_cost = (sub["Değer"] - sub["Top. Kâr/Zarar"]).sum()
         pct = (total_pnl / total_cost * 100) if total_cost != 0 else 0
+        # ÖNEMLİ DEĞİŞİKLİK: işaret önce gelsin ki zarar kırmızı olsun
         col2.metric(
             "Toplam Kâr/Zarar",
             f"{symb}{total_pnl:,.0f}",
-            delta=f"%{pct:.2f}",
+            delta=f"{pct:.2f}%",
         )
 
     st.divider()
@@ -233,4 +234,4 @@ def render_detail_view(symbol, pazar):
         st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Hata: {e}")
+        st.error(f"Veri çekilemedi: {e}")
