@@ -102,43 +102,33 @@ def smart_parse(text_val):
     try: return float(val)
     except: return 0.0
 
-# --- TEFAS FON VERİSİ (ÇİFT MOTORLU GÜÇLENDİRME) ---
-@st.cache_data(ttl=3600) 
+# --- TEFAS VERİSİ ---
+@st.cache_data(ttl=14400) 
 def get_tefas_data(fund_code):
     fund_code = fund_code.upper()
-    
-    # 1. YÖNTEM: TEFAS WEB SİTESİNDEN DİREKT ÇEKME (Scraping)
     try:
         url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
-            # HTML içindeki fiyatı Regex ile buluyoruz
             match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', response.text)
             if match:
                 price_str = match.group(1).replace(",", ".")
                 current_price = float(price_str)
-                return current_price, current_price # Önceki fiyatı webden bulmak zor, şimdilik aynı dönüyoruz
-    except:
-        pass
+                return current_price, current_price 
+    except: pass
 
-    # 2. YÖNTEM: KÜTÜPHANE (Yedek)
     try:
         crawler = Crawler()
-        # 30 günlük veri iste (Tatiller için garanti olsun)
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        
         result = crawler.fetch(start=start_date, end=end_date, name=fund_code, columns=["Price"])
-        
         if not result.empty:
             result = result.sort_index()
             current_price = result["Price"].iloc[-1]
             prev_price = result["Price"].iloc[-2] if len(result) > 1 else current_price
             return float(current_price), float(prev_price)
-    except:
-        pass
-        
+    except: pass
     return 0, 0
 
 # --- COINGECKO GLOBAL VERİ ---
@@ -254,7 +244,7 @@ def get_tickers_data(df_portfolio, usd_try):
         for _, row in assets.iterrows():
             kod = row['Kod']
             pazar = row['Pazar']
-            if "Fiziki" not in pazar and "Gram" not in kod and pazar != "FON":
+            if "Fiziki" not in pazar and "Gram" not in kod and "FON" not in pazar:
                 sym = get_yahoo_symbol(kod, pazar)
                 portfolio_symbols[kod] = sym
 
@@ -384,14 +374,14 @@ MARKET_DATA = {
     "KRIPTO": ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX"],
     "FON (TEFAS/BES)": ["TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "YHB", "OJT", "HKH", "IPB", "KZL", "RPD"],
     "EMTIA": ["Gram Altın (TL)", "Gram Gümüş (TL)", "Altın ONS", "Gümüş ONS", "Petrol", "Doğalgaz"],
-    "FIZIKI VARLIKLAR": ["Gram Altın (Fiziki)", "Çeyrek Altın", "Yarım Altın", "Tam Altın", "Dolar (Nakit)"]
+    "FIZIKI VARLIKLAR": ["Gram Altın (Fiziki)", "Çeyrek Altın", "Yarım Altın", "Tam Altın", "Gram Gümüş (Fiziki)", "Dolar (Nakit)"]
 }
 
 # --- DETAYLI ANALİZ ---
 def render_detail_view(symbol, pazar):
     st.markdown(f"### 🔎 {symbol} Detaylı Analizi")
     
-    if pazar == "FON":
+    if "FON" in pazar:
         price, _ = get_tefas_data(symbol)
         st.metric(f"{symbol} Son Fiyat", f"₺{price:,.6f}")
         st.info("Yatırım fonları için anlık grafik desteği TEFAS kaynaklı sınırlıdır.")
@@ -444,7 +434,7 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU (DÜZELTİLMİŞ) ---
+# --- HESAPLAMA MOTORU ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
@@ -455,7 +445,6 @@ def run_analysis(df, usd_try_rate, view_currency):
         kod = row.get("Kod", "")
         pazar_raw = row.get("Pazar", "")
         
-        # Fon Tanıma
         if kod in KNOWN_FUNDS:
             pazar = "FON"
         else:
@@ -496,23 +485,22 @@ def run_analysis(df, usd_try_rate, view_currency):
             curr_price = maliyet
             prev_close = maliyet
         
-        # FİYAT ÇEKİLEMEZSE 0 YAPMALIYIZ Kİ HATA OLDUĞU ANLAŞILSIN
-        # AMA GÜNLÜK KARI PATLATMAMAK İÇİN PREV_CLOSE DA 0 YAPILIR
         if curr_price == 0: 
-            curr_price = maliyet # Gösterim bozulmasın diye maliyet
-            prev_close = maliyet # Değişim 0 çıksın
-            
-        # Eğer Prev Close 0 gelirse (Fonlarda vs), değişimi 0 yap
-        if prev_close == 0: prev_close = curr_price
+            curr_price = maliyet
+            prev_close = maliyet
 
-        # 100x Şişme Koruması
         if curr_price > 0 and maliyet > 0:
             if (maliyet / curr_price) > 50: 
                 maliyet = maliyet / 100
 
         val_native = curr_price * adet
         cost_native = maliyet * adet
-        daily_chg_native = (curr_price - prev_close) * adet
+        
+        # GÜNLÜK KÂR/ZARAR HESABI İÇİN KORUMA
+        if prev_close == 0:
+            daily_chg_native = 0
+        else:
+            daily_chg_native = (curr_price - prev_close) * adet
 
         if view_currency == "TRY":
             if asset_currency == "USD":
@@ -667,13 +655,16 @@ if selected == "Dashboard":
 
 elif selected == "Tümü":
     if not portfoy_only.empty:
-        st.markdown("#### 🔍 Detaylı Analiz")
-        all_assets = portfoy_only["Kod"].unique().tolist()
-        secilen = st.selectbox("İncelemek istediğiniz varlığı seçin:", all_assets, index=None, placeholder="Varlık Seç...")
-        if secilen:
-            row = portfoy_only[portfoy_only["Kod"] == secilen].iloc[0]
-            sym = get_yahoo_symbol(row["Kod"], row["Pazar"])
-            render_detail_view(sym, row["Pazar"])
+        col_pie_det, col_bar_det = st.columns([1, 1])
+        with col_pie_det:
+            st.subheader("Varlık Bazlı Dağılım")
+            fig_pie_det = px.pie(portfoy_only, values='Değer', names='Kod', hole=0.4)
+            st.plotly_chart(fig_pie_det, use_container_width=True)
+        with col_bar_det:
+            st.subheader("Varlık Bazlı Değerler")
+            top_assets = portfoy_only.sort_values(by="Değer", ascending=False)
+            fig_bar_det = px.bar(top_assets, x='Kod', y='Değer', color='Pazar')
+            st.plotly_chart(fig_bar_det, use_container_width=True)
         st.divider()
         st.subheader("Tüm Portföy Listesi")
         st.dataframe(styled_dataframe(portfoy_only), use_container_width=True, hide_index=True)
