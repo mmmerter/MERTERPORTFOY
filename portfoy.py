@@ -77,7 +77,12 @@ st.markdown("""
 
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
-    if pazar == "FON": return kod 
+    kod = str(kod).upper()
+    
+    # --- ÖZEL HİSSE DÜZELTMELERİ (TRMET -> KOZAA) ---
+    if kod == "TRMET": return "KOZAA.IS"
+    
+    if "FON" in pazar: return kod 
     if "BIST" in pazar: return f"{kod}.IS" if not kod.endswith(".IS") else kod
     elif "KRIPTO" in pazar: return f"{kod}-USD" if not kod.endswith("-USD") else kod
     elif "EMTIA" in pazar:
@@ -102,32 +107,32 @@ def smart_parse(text_val):
     try: return float(val)
     except: return 0.0
 
-# --- TEFAS VERİSİ ---
+# --- TEFAS FON VERİSİ ---
 @st.cache_data(ttl=14400) 
 def get_tefas_data(fund_code):
-    fund_code = fund_code.upper()
     try:
-        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', response.text)
-            if match:
-                price_str = match.group(1).replace(",", ".")
-                current_price = float(price_str)
-                return current_price, current_price 
-    except: pass
-
-    try:
+        # Önce kütüphaneyi dene
         crawler = Crawler()
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
         result = crawler.fetch(start=start_date, end=end_date, name=fund_code, columns=["Price"])
         if not result.empty:
             result = result.sort_index()
-            current_price = result["Price"].iloc[-1]
-            prev_price = result["Price"].iloc[-2] if len(result) > 1 else current_price
-            return float(current_price), float(prev_price)
+            current_price = float(result["Price"].iloc[-1])
+            prev_price = float(result["Price"].iloc[-2]) if len(result) > 1 else current_price
+            return current_price, prev_price
+    except: pass
+    
+    # Kütüphane çalışmazsa Web Scraping (Yedek)
+    try:
+        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200:
+            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
+            if match:
+                price = float(match.group(1).replace(",", "."))
+                return price, price
     except: pass
     return 0, 0
 
@@ -244,6 +249,7 @@ def get_tickers_data(df_portfolio, usd_try):
         for _, row in assets.iterrows():
             kod = row['Kod']
             pazar = row['Pazar']
+            # FON ve FİZİKİ hariç
             if "Fiziki" not in pazar and "Gram" not in kod and "FON" not in pazar:
                 sym = get_yahoo_symbol(kod, pazar)
                 portfolio_symbols[kod] = sym
@@ -369,12 +375,12 @@ ANALYSIS_COLS = ["Kod", "Pazar", "Tip", "Adet", "Maliyet", "Fiyat", "PB", "Değe
 
 # --- VARLIK LİSTESİ ---
 MARKET_DATA = {
-    "BIST (Tümü)": ["THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK", "KCHOL", "SAHOL", "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM", "HEKTS", "SASA", "ASTOR", "KONTR", "MEGMT", "REEDR", "TABGD", "A1CAP", "ACSEL"], 
+    "BIST (Tümü)": ["THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK", "KCHOL", "SAHOL", "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM", "HEKTS", "SASA", "ASTOR", "KONTR", "MEGMT", "REEDR", "TABGD", "A1CAP", "ACSEL", "TRMET"], 
     "ABD (S&P + NASDAQ)": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META"], 
     "KRIPTO": ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX"],
     "FON (TEFAS/BES)": ["TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "YHB", "OJT", "HKH", "IPB", "KZL", "RPD"],
     "EMTIA": ["Gram Altın (TL)", "Gram Gümüş (TL)", "Altın ONS", "Gümüş ONS", "Petrol", "Doğalgaz"],
-    "FIZIKI VARLIKLAR": ["Gram Altın (Fiziki)", "Çeyrek Altın", "Yarım Altın", "Tam Altın", "Gram Gümüş (Fiziki)", "Dolar (Nakit)"]
+    "FIZIKI VARLIKLAR": ["Gram Altın (Fiziki)", "Gram Gümüş (Fiziki)", "Çeyrek Altın", "Yarım Altın", "Tam Altın", "Dolar (Nakit)"]
 }
 
 # --- DETAYLI ANALİZ ---
@@ -434,7 +440,7 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU ---
+# --- HESAPLAMA MOTORU (GÜMÜŞ VE TRMET FİX) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
@@ -464,12 +470,32 @@ def run_analysis(df, usd_try_rate, view_currency):
         try:
             if "FON" in pazar:
                 curr_price, prev_close = get_tefas_data(kod)
-            elif "Gram Altın (TL)" in kod:
+            
+            # --- GRAM ALTIN ---
+            elif "Gram Altın" in kod:
                 hist = yf.Ticker("GC=F").history(period="2d")
                 if len(hist) > 1:
-                    curr_price = (hist['Close'].iloc[-1] * usd_try_rate) / 31.1035
-                    prev_close = (hist['Close'].iloc[-2] * usd_try_rate) / 31.1035
-                else: curr_price = maliyet
+                    ons_now = hist['Close'].iloc[-1]
+                    ons_prev = hist['Close'].iloc[-2]
+                    curr_price = (ons_now * usd_try_rate) / 31.1035
+                    prev_close = (ons_prev * usd_try_rate) / 31.1035
+                else: 
+                    curr_price = maliyet
+                    prev_close = maliyet
+
+            # --- GRAM GÜMÜŞ (DÜZELTİLDİ) ---
+            elif "Gram Gümüş" in kod:
+                hist = yf.Ticker("SI=F").history(period="2d")
+                if len(hist) > 1:
+                    ons_now = hist['Close'].iloc[-1]
+                    ons_prev = hist['Close'].iloc[-2]
+                    # Gümüş için de aynı gram formülü geçerli: (Ons * Dolar) / 31.1035
+                    curr_price = (ons_now * usd_try_rate) / 31.1035
+                    prev_close = (ons_prev * usd_try_rate) / 31.1035
+                else: 
+                    curr_price = maliyet
+                    prev_close = maliyet
+
             elif "Fiziki" in pazar: 
                 curr_price = maliyet
                 prev_close = maliyet
@@ -479,28 +505,27 @@ def run_analysis(df, usd_try_rate, view_currency):
                     curr_price = hist['Close'].iloc[-1]
                     prev_close = hist['Close'].iloc[0] 
                 else: 
-                    curr_price = maliyet
-                    prev_close = maliyet
+                    curr_price = 0 
+                    prev_close = 0
         except: 
-            curr_price = maliyet
-            prev_close = maliyet
+            curr_price = 0
+            prev_close = 0
         
+        # FİYAT BULUNAMAZSA MALİYET AL
         if curr_price == 0: 
             curr_price = maliyet
             prev_close = maliyet
+        
+        if prev_close == 0: prev_close = curr_price
 
+        # 100 KAT KORUMASI
         if curr_price > 0 and maliyet > 0:
             if (maliyet / curr_price) > 50: 
                 maliyet = maliyet / 100
 
         val_native = curr_price * adet
         cost_native = maliyet * adet
-        
-        # GÜNLÜK KÂR/ZARAR HESABI İÇİN KORUMA
-        if prev_close == 0:
-            daily_chg_native = 0
-        else:
-            daily_chg_native = (curr_price - prev_close) * adet
+        daily_chg_native = (curr_price - prev_close) * adet
 
         if view_currency == "TRY":
             if asset_currency == "USD":
@@ -544,8 +569,9 @@ def get_historical_chart(df, usd_try):
     for idx, row in df.iterrows():
         kod = row['Kod']
         pazar = row['Pazar']
-        sym = get_yahoo_symbol(kod, pazar)
-        if "Gram" not in kod and "Fiziki" not in pazar and "FON" not in pazar:
+        # FON ve FİZİKİ hariç
+        if "Fiziki" not in pazar and "FON" not in pazar:
+            sym = get_yahoo_symbol(kod, pazar)
             try: adet = smart_parse(row['Adet'])
             except: adet = 0
             tickers_map[sym] = {"Adet": adet, "Pazar": pazar}
@@ -727,8 +753,8 @@ elif selected == "Ekle/Çıkar":
             manuel_kod = st.text_input("Veya Manuel Yaz (Örn: TTE)").upper()
             
             c1, c2 = st.columns(2)
-            adet_str = c1.text_input("Adet (Örn: 119)", value="0")
-            maliyet_str = c2.text_input("Maliyet (Örn: 30,26)", value="0")
+            adet_str = c1.text_input("Adet", value="0")
+            maliyet_str = c2.text_input("Maliyet", value="0")
             not_inp = st.text_input("Not")
 
             try:
