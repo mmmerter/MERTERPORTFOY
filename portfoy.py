@@ -407,12 +407,23 @@ ANALYSIS_COLS = ["Kod", "Pazar", "Tip", "Adet", "Maliyet", "Fiyat", "PB", "Değe
 
 # --- VARLIK LİSTESİ ---
 MARKET_DATA = {
-    "BIST (Tümü)": ["THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK", "KCHOL", "SAHOL", "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM", "HEKTS", "SASA", "ASTOR", "KONTR", "MEGMT", "REEDR", "TABGD", "A1CAP", "ACSEL"], 
+    "BIST (Tümü)": [
+        "THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK",
+        "KCHOL", "SAHOL", "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM",
+        "HEKTS", "SASA", "ASTOR", "KONTR", "MEGMT", "REEDR", "TABGD", "A1CAP", "ACSEL"
+    ], 
     "ABD (S&P + NASDAQ)": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META"], 
     "KRIPTO": ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX"],
-    "FON (TEFAS/BES)": ["TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH"],
+    "FON (TEFAS/BES)": [
+        "TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF",
+        "GMR", "TI2", "TI3", "IHK", "IDH",
+        # 🔽 Senin istediklerin:
+        "YHB", "GGK", "URA", "OTJ", "RUT"
+    ],
     "EMTIA": ["Gram Altın (TL)", "Gram Gümüş (TL)", "Altın ONS", "Gümüş ONS", "Petrol", "Doğalgaz"],
     "FIZIKI VARLIKLAR": ["Gram Altın (Fiziki)", "Çeyrek Altın", "Yarım Altın", "Tam Altın", "Dolar (Nakit)"]
+}
+
 }
 
 # --- DETAYLI ANALİZ ---
@@ -883,4 +894,5 @@ elif selected == "Ekle/Çıkar":
                         time.sleep(1)
                         st.rerun()
         else: st.info("İşlem yapılacak varlık yok.")
+
 
