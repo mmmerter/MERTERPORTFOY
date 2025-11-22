@@ -788,7 +788,7 @@ def render_pazar_tab(df, filter_text, currency_symbol):
         st.info(f"{filter_text} kategorisinde varlık bulunamadı.")
         return
 
-    total_val = df_filtered["Değer"].sum()
+total_val = df_filtered["Değer"].sum()
 total_pl = df_filtered["Top. Kâr/Zarar"].sum()
 
 # Yüzdesel getiri (toplam kâr / toplam değer)
@@ -1164,5 +1164,4 @@ elif selected == "Ekle/Çıkar":
                         st.rerun()
         else:
             st.info("İşlem yapılacak varlık yok.")
-
 
