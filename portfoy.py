@@ -26,28 +26,26 @@ st.markdown("""
 <style>
     .block-container {padding-top: 1rem;}
     div[data-testid="stMetric"] {
-        background-color: #262730 !important;
+        background-color: #262730;
         border: 1px solid #464b5f;
         border-radius: 10px;
         padding: 15px;
-        color: #ffffff !important;
+        color: #ffffff;
     }
     div[data-testid="stMetricValue"] { color: #ffffff !important; }
-    div[data-testid="stMetricLabel"] { color: #bfbfbf !important; }
+    div[data-testid="stMetricLabel"] { color: #d0d0d0 !important; }
     
     .ticker-container {
         width: 100%;
         overflow: hidden;
-        background-color: #0e1117;
+        background-color: #161616;
         border-bottom: 1px solid #333;
-        margin-bottom: 0px;
+        margin-bottom: 20px;
         white-space: nowrap;
         position: relative;
     }
-    
     .market-ticker { background-color: #0e1117; border-bottom: 1px solid #333; padding: 8px 0; }
-    .portfolio-ticker { background-color: #161b22; border-bottom: 2px solid #FF4B4B; padding: 8px 0; margin-bottom: 20px; }
-
+    .portfolio-ticker { background-color: #1a1c24; border-bottom: 2px solid #FF4B4B; padding: 8px 0; margin-bottom: 20px; }
     .ticker-text {
         display: inline-block;
         white-space: nowrap;
@@ -57,15 +55,12 @@ st.markdown("""
         font-weight: 900; 
         color: #00e676;
     }
-    
     .animate-market { animation: ticker 65s linear infinite; color: #4da6ff; }
     .animate-portfolio { animation: ticker 55s linear infinite; color: #ffd700; }
-
     @keyframes ticker {
         0% { transform: translate3d(0, 0, 0); }
         100% { transform: translate3d(-50%, 0, 0); } 
     }
-
     .news-card {
         background-color: #1E1E1E;
         padding: 15px;
@@ -100,37 +95,34 @@ def smart_parse(text_val):
     val = str(text_val).strip()
     if not val: return 0.0
     val = re.sub(r"[^\d.,]", "", val)
-    
-    if "," in val:
+    if val.count('.') > 1 and ',' not in val:
+        parts = val.split('.')
+        val = f"{parts[0]}.{''.join(parts[1:])}"
+    if "." in val and "," in val:
         val = val.replace(".", "").replace(",", ".")
-    elif "." in val:
-        if val.count(".") > 1:
-             parts = val.rsplit(".", 1)
-             val = parts[0].replace(".", "") + "." + parts[1]
-
+    elif "," in val:
+        val = val.replace(",", ".")
     try: return float(val)
     except: return 0.0
 
 # --- TEFAS FON VERİSİ ---
 @st.cache_data(ttl=14400) 
 def get_tefas_data(fund_code):
-    fund_code = fund_code.upper()
     try:
         url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', response.text)
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200:
+            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
             if match:
-                price_str = match.group(1).replace(",", ".")
-                current_price = float(price_str)
-                return current_price, current_price 
+                price = float(match.group(1).replace(",", "."))
+                return price, price 
     except: pass
 
     try:
         crawler = Crawler()
         end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=15)).strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
         result = crawler.fetch(start=start_date, end=end_date, name=fund_code, columns=["Price"])
         if not result.empty:
             result = result.sort_index()
@@ -138,9 +130,9 @@ def get_tefas_data(fund_code):
             prev_price = float(result["Price"].iloc[-2]) if len(result) > 1 else current_price
             return current_price, prev_price
     except: pass
-    return 0.0, 0.0
+    return 0, 0
 
-# --- COINGECKO GLOBAL VERİ ---
+# --- COINGECKO GLOBAL ---
 @st.cache_data(ttl=300)
 def get_crypto_globals():
     try:
@@ -360,7 +352,7 @@ st.markdown(f"""
 selected = option_menu(
     menu_title=None, 
     options=["Dashboard", "Tümü", "BIST", "ABD", "FON", "Emtia", "Kripto", "Haberler", "İzleme", "Satışlar", "Ekle/Çıkar"], 
-    icons=["speedometer2", "list-task", "graph-up-arrow", "currency-dollar", "piggy-bank", "fuel-pump", "currency-bitcoin", "newspaper", "eye", "receipt", "gear"], 
+    icons=["speedometer2", "list-task", "graph-up-arrow", "currency-dollar", "piggy-bank", "fuel-pump", "house", "currency-bitcoin", "newspaper", "eye", "receipt", "gear"], 
     menu_icon="cast", 
     default_index=0, 
     orientation="horizontal",
@@ -447,7 +439,7 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU (ZIRHLI VE ÇÖKME ÖNLEYİCİ) ---
+# --- HESAPLAMA MOTORU ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
@@ -455,119 +447,113 @@ def run_analysis(df, usd_try_rate, view_currency):
     KNOWN_FUNDS = ["YHB", "TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "OJT", "HKH", "IPB", "KZL", "RPD"]
 
     for i, row in df.iterrows():
-        try:
-            kod = row.get("Kod", "")
-            pazar_raw = row.get("Pazar", "")
-            
-            if kod in KNOWN_FUNDS:
-                pazar = "FON"
-            else:
-                pazar = pazar_raw
-            
-            if "FON" in pazar: pazar = "FON"
-            if "FIZIKI" in str(pazar).upper(): pazar = "EMTIA"
+        kod = row.get("Kod", "")
+        pazar_raw = row.get("Pazar", "")
+        
+        if kod in KNOWN_FUNDS:
+            pazar = "FON"
+        else:
+            pazar = pazar_raw
+        
+        if "FON" in pazar: pazar = "FON"
+        if "FIZIKI" in str(pazar).upper(): pazar = "EMTIA"
 
-            adet = smart_parse(row.get("Adet", 0))
-            maliyet = smart_parse(row.get("Maliyet", 0))
+        adet = smart_parse(row.get("Adet", 0))
+        maliyet = smart_parse(row.get("Maliyet", 0))
+        
+        if not kod: continue 
+        symbol = get_yahoo_symbol(kod, pazar)
+        asset_currency = "USD"
+        if "BIST" in pazar or "TL" in kod or "Fiziki" in pazar or "FON" in pazar or "EMTIA" in pazar: asset_currency = "TRY"
+        
+        curr_price = 0
+        prev_close = 0
+        
+        try:
+            if "FON" in pazar:
+                curr_price, prev_close = get_tefas_data(kod)
             
-            if not kod: continue 
-            symbol = get_yahoo_symbol(kod, pazar)
-            asset_currency = "USD"
-            if "BIST" in pazar or "TL" in kod or "Fiziki" in pazar or "FON" in pazar or "EMTIA" in pazar: asset_currency = "TRY"
-            
+            elif "Gram Gümüş" in kod:
+                hist = yf.Ticker("SI=F").history(period="2d")
+                if len(hist) > 0:
+                    ons_now = hist['Close'].iloc[-1]
+                    ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
+                    curr_price = (ons_now * usd_try_rate) / 31.1035
+                    prev_close = (ons_prev * usd_try_rate) / 31.1035
+                else:
+                    curr_price = maliyet
+                    prev_close = maliyet
+
+            elif "Gram Altın" in kod:
+                hist = yf.Ticker("GC=F").history(period="2d")
+                if len(hist) > 0:
+                    ons_now = hist['Close'].iloc[-1]
+                    ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
+                    curr_price = (ons_now * usd_try_rate) / 31.1035
+                    prev_close = (ons_prev * usd_try_rate) / 31.1035
+                else:
+                    curr_price = maliyet
+                    prev_close = maliyet
+
+            else:
+                hist = yf.Ticker(symbol).history(period="2d")
+                if not hist.empty:
+                    curr_price = hist['Close'].iloc[-1]
+                    prev_close = hist['Close'].iloc[0] 
+                else: 
+                    curr_price = 0 
+                    prev_close = 0
+        except: 
             curr_price = 0
             prev_close = 0
-            
-            try:
-                if "FON" in pazar:
-                    curr_price, prev_close = get_tefas_data(kod)
-                
-                elif "Gram Gümüş" in kod:
-                    hist = yf.Ticker("SI=F").history(period="2d")
-                    if len(hist) > 0:
-                        ons_now = hist['Close'].iloc[-1]
-                        ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
-                        curr_price = (ons_now * usd_try_rate) / 31.1035
-                        prev_close = (ons_prev * usd_try_rate) / 31.1035
-                    else:
-                        curr_price = maliyet
-                        prev_close = maliyet
+        
+        if curr_price == 0: 
+            curr_price = maliyet
+            prev_close = maliyet
+        
+        if prev_close == 0: prev_close = curr_price
 
-                elif "Gram Altın" in kod:
-                    hist = yf.Ticker("GC=F").history(period="2d")
-                    if len(hist) > 0:
-                        ons_now = hist['Close'].iloc[-1]
-                        ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
-                        curr_price = (ons_now * usd_try_rate) / 31.1035
-                        prev_close = (ons_prev * usd_try_rate) / 31.1035
-                    else:
-                        curr_price = maliyet
-                        prev_close = maliyet
+        if curr_price > 0 and maliyet > 0:
+            if (maliyet / curr_price) > 50: 
+                maliyet = maliyet / 100
 
-                else:
-                    hist = yf.Ticker(symbol).history(period="2d")
-                    if not hist.empty:
-                        curr_price = hist['Close'].iloc[-1]
-                        prev_close = hist['Close'].iloc[0] 
-                    else: 
-                        curr_price = 0 
-                        prev_close = 0
-            except: 
-                curr_price = 0
-                prev_close = 0
-            
-            if curr_price == 0: 
-                curr_price = maliyet
-                prev_close = maliyet
-            
-            if prev_close == 0: prev_close = curr_price
+        val_native = curr_price * adet
+        cost_native = maliyet * adet
+        daily_chg_native = (curr_price - prev_close) * adet
 
-            if curr_price > 0 and maliyet > 0:
-                if (maliyet / curr_price) > 50: 
-                    maliyet = maliyet / 100
-
-            val_native = curr_price * adet
-            cost_native = maliyet * adet
-            daily_chg_native = (curr_price - prev_close) * adet
-
-            if view_currency == "TRY":
-                if asset_currency == "USD":
-                    fiyat_goster = curr_price * usd_try_rate
-                    val_goster = val_native * usd_try_rate
-                    cost_goster = cost_native * usd_try_rate
-                    daily_chg = daily_chg_native * usd_try_rate
-                else: 
-                    fiyat_goster = curr_price
-                    val_goster = val_native
-                    cost_goster = cost_native
-                    daily_chg = daily_chg_native
-            elif view_currency == "USD":
-                if asset_currency == "TRY":
-                    fiyat_goster = curr_price / usd_try_rate
-                    val_goster = val_native / usd_try_rate
-                    cost_goster = cost_native / usd_try_rate
-                    daily_chg = daily_chg_native / usd_try_rate
-                else: 
-                    fiyat_goster = curr_price
-                    val_goster = val_native
-                    cost_goster = cost_native
-                    daily_chg = daily_chg_native
-            
-            pnl = val_goster - cost_goster
-            pnl_pct = (pnl / cost_goster * 100) if cost_goster > 0 else 0
-            
-            results.append({
-                "Kod": kod, "Pazar": pazar, "Tip": row["Tip"],
-                "Adet": adet, "Maliyet": maliyet,
-                "Fiyat": fiyat_goster, "PB": view_currency,
-                "Değer": val_goster, "Top. Kâr/Zarar": pnl, "Top. %": pnl_pct,
-                "Gün. Kâr/Zarar": daily_chg, "Notlar": row.get("Notlar", "")
-            })
-        except Exception as e:
-            # Hata olursa o satırı atla ama programı çökertme
-            # Kullanıcıya bilgi vermek istersen buraya st.error eklenebilir ama loop içinde tehlikeli
-            continue
-
+        if view_currency == "TRY":
+            if asset_currency == "USD":
+                fiyat_goster = curr_price * usd_try_rate
+                val_goster = val_native * usd_try_rate
+                cost_goster = cost_native * usd_try_rate
+                daily_chg = daily_chg_native * usd_try_rate
+            else: 
+                fiyat_goster = curr_price
+                val_goster = val_native
+                cost_goster = cost_native
+                daily_chg = daily_chg_native
+        elif view_currency == "USD":
+            if asset_currency == "TRY":
+                fiyat_goster = curr_price / usd_try_rate
+                val_goster = val_native / usd_try_rate
+                cost_goster = cost_native / usd_try_rate
+                daily_chg = daily_chg_native / usd_try_rate
+            else: 
+                fiyat_goster = curr_price
+                val_goster = val_native
+                cost_goster = cost_native
+                daily_chg = daily_chg_native
+        
+        pnl = val_goster - cost_goster
+        pnl_pct = (pnl / cost_goster * 100) if cost_goster > 0 else 0
+        
+        results.append({
+            "Kod": kod, "Pazar": pazar, "Tip": row["Tip"],
+            "Adet": adet, "Maliyet": maliyet,
+            "Fiyat": fiyat_goster, "PB": view_currency,
+            "Değer": val_goster, "Top. Kâr/Zarar": pnl, "Top. %": pnl_pct,
+            "Gün. Kâr/Zarar": daily_chg, "Notlar": row.get("Notlar", "")
+        })
     return pd.DataFrame(results)
 
 @st.cache_data(ttl=3600)
@@ -577,6 +563,7 @@ def get_historical_chart(df, usd_try):
     for idx, row in df.iterrows():
         kod = row['Kod']
         pazar = row['Pazar']
+        # GRAM VE FİZİKİ HARİÇ
         if "Gram" not in kod and "Fiziki" not in pazar and "FON" not in pazar:
             sym = get_yahoo_symbol(kod, pazar)
             try: adet = smart_parse(row['Adet'])
@@ -629,6 +616,7 @@ def render_pazar_tab(df, filter_text, currency_symbol):
     c1.metric(f"Toplam {filter_text} Varlık", f"{currency_symbol}{total_val:,.0f}")
     c2.metric(f"Toplam {filter_text} Kâr/Zarar", f"{currency_symbol}{total_pl:,.0f}", delta=f"{total_pl:,.0f}")
     
+    # GRAFİKLER GERİ GELDİ
     st.divider()
     col_pie, col_bar = st.columns([1, 1])
     with col_pie:
@@ -664,42 +652,6 @@ sym = "₺" if GORUNUM_PB == "TRY" else "$"
 
 if selected == "Dashboard":
     if not portfoy_only.empty:
-        # TREEMAP EKLENDİ
-        c_tree_1, c_tree_2 = st.columns([3, 1])
-        with c_tree_1:
-            st.subheader("🗺️ Portföy Isı Haritası")
-        with c_tree_2:
-            map_mode = st.radio("Renklendirme:", ["Genel Kâr %", "Günlük Değişim %"], horizontal=True)
-        
-        color_col = 'Top. %'
-        portfoy_only['Gün. %'] = 0 # Default
-        # Sıfıra bölme hatasını önlemek için
-        safe_deger = portfoy_only['Değer'] - portfoy_only['Gün. Kâr/Zarar']
-        portfoy_only.loc[safe_deger != 0, 'Gün. %'] = (portfoy_only['Gün. Kâr/Zarar'] / safe_deger) * 100
-
-        if map_mode == "Günlük Değişim %":
-            color_col = 'Gün. %'
-
-        fig_tree = px.treemap(
-            portfoy_only,
-            path=[px.Constant("Portföy"), 'Kod'], 
-            values='Değer',
-            color=color_col,
-            custom_data=['Değer', 'Top. Kâr/Zarar', color_col],
-            color_continuous_scale='RdYlGn',
-            color_continuous_midpoint=0
-        )
-        
-        fig_tree.update_traces(
-            textinfo="label+value+percent entry",
-            texttemplate="<b>%{label}</b><br>%{customdata[0]:,.0f}<br><b>%{customdata[2]:.2f}%</b>",
-            textposition="middle center",
-            textfont=dict(size=20, family="Arial Black")
-        )
-        fig_tree.update_layout(margin=dict(t=0, l=0, r=0, b=0))
-        st.plotly_chart(fig_tree, use_container_width=True)
-
-        st.divider()
         total_val = portfoy_only["Değer"].sum()
         total_pl = portfoy_only["Top. Kâr/Zarar"].sum()
         c1, c2 = st.columns(2)
@@ -716,6 +668,11 @@ if selected == "Dashboard":
             df_pazar_group = portfoy_only.groupby("Pazar")["Değer"].sum().reset_index().sort_values(by="Değer", ascending=False)
             fig_bar = px.bar(df_pazar_group, x='Pazar', y='Değer', color='Pazar')
             st.plotly_chart(fig_bar, use_container_width=True)
+        st.divider()
+        st.subheader("🗺️ Portföy Isı Haritası")
+        fig_tree = px.treemap(portfoy_only, path=[px.Constant("Portföy"), 'Kod'], values='Değer', color='Top. %', hover_data=['Pazar', 'Değer', 'Top. Kâr/Zarar', 'Top. %'], color_continuous_scale='RdYlGn', color_continuous_midpoint=0)
+        fig_tree.update_layout(margin=dict(t=0, l=0, r=0, b=0))
+        st.plotly_chart(fig_tree, use_container_width=True)
         st.divider()
         st.subheader("📈 Tarihsel Zenginleşme (TL)")
         hist_data = get_historical_chart(portfoy_df, USD_TRY)
