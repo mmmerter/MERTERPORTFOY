@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
+from tefas import Crawler 
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(
@@ -22,7 +23,6 @@ st.markdown("""
 <style>
     .block-container {padding-top: 1rem;}
     
-    /* Metrik Kutuları */
     div[data-testid="stMetric"] {
         background-color: #262730;
         border: 1px solid #464b5f;
@@ -33,7 +33,6 @@ st.markdown("""
     div[data-testid="stMetricValue"] { color: #ffffff !important; }
     div[data-testid="stMetricLabel"] { color: #d0d0d0 !important; }
     
-    /* SONSUZ KAYAN YAZI (Ticker Tape) */
     .ticker-container {
         width: 100%;
         overflow: hidden;
@@ -48,24 +47,23 @@ st.markdown("""
         display: inline-block;
         white-space: nowrap;
         padding-left: 0;
-        animation: ticker 60s linear infinite; /* Sonsuz akış hızı */
+        animation: ticker 60s linear infinite; 
         font-family: 'Courier New', monospace;
         font-size: 16px;
         font-weight: bold;
         color: #00e676;
     }
     
-    /* Sonsuz döngü animasyonu */
     @keyframes ticker {
         0% { transform: translate3d(0, 0, 0); }
-        100% { transform: translate3d(-50%, 0, 0); } /* İçeriği 2 katına çıkarıp yarısını kaydıracağız */
+        100% { transform: translate3d(-50%, 0, 0); } 
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
-    if pazar == "FON": return kod # Fonlarda kod değişmez
+    if pazar == "FON": return kod 
     if "BIST" in pazar: return f"{kod}.IS" if not kod.endswith(".IS") else kod
     elif "KRIPTO" in pazar: return f"{kod}-USD" if not kod.endswith("-USD") else kod
     elif "EMTIA" in pazar:
@@ -74,6 +72,18 @@ def get_yahoo_symbol(kod, pazar):
             if k in kod: return v
         return kod
     return kod 
+
+# --- TEFAS FON FİYATI ---
+@st.cache_data(ttl=3600)
+def get_tefas_price(fund_code):
+    try:
+        crawler = Crawler()
+        start_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
+        result = crawler.fetch(start=start_date, name=fund_code, columns=["Price"])
+        if not result.empty:
+            return result["Price"].iloc[0]
+        return 0
+    except: return 0
 
 # --- GOOGLE SHEETS VERİ ÇEKME ---
 SHEET_NAME = "PortfoyData" 
@@ -130,7 +140,7 @@ def save_data_to_sheet(df):
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
-# --- MARKET VE PORTFÖY ŞERİDİ (SONSUZ DÖNGÜ İÇİN İÇERİK) ---
+# --- MARKET VE PORTFÖY ŞERİDİ ---
 @st.cache_data(ttl=45) 
 def get_combined_ticker(df_portfolio):
     market_symbols = {"BIST 100": "XU100.IS", "USD": "TRY=X", "EUR": "EURTRY=X", "Altın": "GC=F", "BTC": "BTC-USD"}
@@ -179,7 +189,6 @@ def get_combined_ticker(df_portfolio):
                     except: pass
     except: data_str = "Veriler yükleniyor..."
     
-    # İçeriği iki kere yazıyoruz ki animasyon kayarken boşluk oluşmasın (Sonsuz döngü hilesi)
     return f'<div class="ticker-text">{data_str} &nbsp;&nbsp;&nbsp; {data_str}</div>'
 
 portfoy_df = get_data_from_sheet()
@@ -192,11 +201,10 @@ with c_toggle:
     st.write("") 
     GORUNUM_PB = st.radio("Para Birimi:", ["TRY", "USD"], horizontal=True)
 
-# --- KAYAN YAZI ---
 ticker_html = get_combined_ticker(portfoy_df)
 st.markdown(f"""<div class="ticker-container">{ticker_html}</div>""", unsafe_allow_html=True)
 
-# --- NAVİGASYON MENÜSÜ (FON EKLENDİ) ---
+# --- NAVİGASYON ---
 selected = option_menu(
     menu_title=None, 
     options=["Dashboard", "Tümü", "BIST", "ABD", "FON", "Emtia", "Fiziki", "Kripto", "İzleme", "Satışlar", "Ekle/Çıkar"], 
@@ -214,7 +222,7 @@ selected = option_menu(
 
 ANALYSIS_COLS = ["Kod", "Pazar", "Tip", "Adet", "Maliyet", "Fiyat", "PB", "Değer", "Top. Kâr/Zarar", "Top. %", "Gün. Kâr/Zarar", "Notlar"]
 
-# --- VARLIK LİSTESİ (FON EKLENDİ) ---
+# --- VARLIK LİSTESİ ---
 MARKET_DATA = {
     "BIST (Tümü)": ["THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK", "KCHOL", "SAHOL", "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM", "HEKTS", "SASA", "ASTOR", "KONTR", "MEGMT", "REEDR", "TABGD", "A1CAP", "ACSEL"], 
     "ABD (S&P + NASDAQ)": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META"], 
@@ -235,20 +243,26 @@ def get_usd_try():
 
 USD_TRY = get_usd_try()
 
-# --- DETAYLI ANALİZ (MUM GRAFİĞİ İYİLEŞTİRİLDİ) ---
-def render_detail_view(symbol):
+# --- DETAYLI ANALİZ (MUM GRAFİĞİ) ---
+def render_detail_view(symbol, pazar):
     st.markdown(f"### 🔎 {symbol} Detaylı Analizi")
+    
+    if pazar == "FON":
+        price = get_tefas_price(symbol)
+        st.metric(f"{symbol} Son Fiyat", f"₺{price:,.6f}")
+        st.info("Yatırım fonları için anlık grafik desteği TEFAS kaynaklı sınırlıdır.")
+        return
+
     try:
         ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="2y") # Daha uzun veri
+        hist = ticker.history(period="2y")
         
         if not hist.empty:
-            # MUM GRAFİĞİ VE ZAMAN SEÇİCİ (RANGE SLIDER)
+            # MUM GRAFİĞİ
             fig = go.Figure(data=[go.Candlestick(x=hist.index,
                             open=hist['Open'], high=hist['High'],
                             low=hist['Low'], close=hist['Close'],
                             name=symbol)])
-            
             fig.update_layout(
                 title=f'{symbol} Fiyat Grafiği',
                 yaxis_title='Fiyat',
@@ -264,7 +278,7 @@ def render_detail_view(symbol):
                             dict(count=1, label="1Y", step="year", stepmode="backward"),
                             dict(step="all", label="TÜMÜ")
                         ]),
-                        bgcolor="#262730", # Buton arka planı
+                        bgcolor="#262730",
                         font=dict(color="white")
                     ),
                     rangeslider=dict(visible=False),
@@ -273,7 +287,6 @@ def render_detail_view(symbol):
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # Temel Analiz Kartları
             info = ticker.info
             market_cap = info.get('marketCap', 'N/A')
             if isinstance(market_cap, int): market_cap = f"{market_cap:,.0f}"
@@ -283,9 +296,8 @@ def render_detail_view(symbol):
             c3.metric("Piyasa Değeri", market_cap)
             c4.metric("52H Yüksek", info.get('fiftyTwoWeekHigh', '-'))
             c5.metric("52H Düşük", info.get('fiftyTwoWeekLow', '-'))
-            
         else:
-            st.warning("Grafik verisi bulunamadı (Fonlar veya Fiziki varlıklar için grafik desteklenmiyor olabilir).")
+            st.warning("Grafik verisi bulunamadı.")
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
@@ -302,12 +314,12 @@ def run_analysis(df, usd_try_rate, view_currency):
         asset_currency = "USD"
         if "BIST" in pazar or "TL" in kod or "Fiziki" in pazar or pazar == "FON": asset_currency = "TRY"
         try:
-            if "Gram Altın (TL)" in kod:
+            if pazar == "FON":
+                curr_price = get_tefas_price(kod)
+            elif "Gram Altın (TL)" in kod:
                 hist = yf.Ticker("GC=F").history(period="2d")
                 curr_price = (hist['Close'].iloc[-1] * usd_try_rate) / 31.1035
             elif "Fiziki" in pazar: curr_price = maliyet
-            elif pazar == "FON": 
-                curr_price = maliyet # Fonlar için kütüphanesiz fiyat çekilemediği için maliyet varsayılır
             else:
                 hist = yf.Ticker(symbol).history(period="2d")
                 curr_price = hist['Close'].iloc[-1] if not hist.empty else maliyet
@@ -404,16 +416,34 @@ def render_pazar_tab(df, filter_text, currency_symbol):
     c1.metric(f"Toplam {filter_text} Varlık", f"{currency_symbol}{total_val:,.0f}")
     c2.metric(f"Toplam {filter_text} Kâr/Zarar", f"{currency_symbol}{total_pl:,.0f}", delta=f"{total_pl:,.0f}")
     
-    # DETAYLI ANALİZ SEÇİMİ
+    # --- PASTA & BAR GRAFİKLERİ (BURADA) ---
+    st.divider()
+    col_pie, col_bar = st.columns([1, 1])
+    with col_pie:
+        st.subheader(f"{filter_text} Dağılım")
+        fig_pie = px.pie(df_filtered, values='Değer', names='Kod', hole=0.4)
+        st.plotly_chart(fig_pie, use_container_width=True)
+    with col_bar:
+        st.subheader(f"{filter_text} Değerleri")
+        df_sorted = df_filtered.sort_values(by="Değer", ascending=False)
+        fig_bar = px.bar(df_sorted, x='Kod', y='Değer', color='Top. Kâr/Zarar')
+        st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # --- TARİHSEL ZENGİNLEŞME (BURADA) ---
+    st.divider()
+    st.subheader(f"📈 {filter_text} Tarihsel Değer (Simülasyon)")
+    hist_data = get_historical_chart(df_filtered, USD_TRY)
+    if hist_data is not None: st.line_chart(hist_data, color="#4CAF50")
+
+    # --- DETAYLI ANALİZ ---
     st.divider()
     st.markdown("#### 🔍 Detaylı Analiz")
     varlik_listesi = df_filtered["Kod"].unique().tolist()
-    secilen_varlik = st.selectbox(f"İncelemek istediğiniz {filter_text} varlığını seçin:", varlik_listesi, index=None, placeholder="Varlık Seç...")
-    
+    secilen_varlik = st.selectbox(f"İncelemek istediğiniz {filter_text} varlığını seçin:", varlik_listesi, index=None, placeholder="Seçiniz...")
     if secilen_varlik:
         row = df_filtered[df_filtered["Kod"] == secilen_varlik].iloc[0]
         sym = get_yahoo_symbol(row["Kod"], row["Pazar"])
-        render_detail_view(sym)
+        render_detail_view(sym, row["Pazar"])
 
     st.divider()
     st.subheader(f"{filter_text} Liste")
@@ -454,7 +484,7 @@ elif selected == "Tümü":
         if secilen:
             row = portfoy_only[portfoy_only["Kod"] == secilen].iloc[0]
             sym = get_yahoo_symbol(row["Kod"], row["Pazar"])
-            render_detail_view(sym)
+            render_detail_view(sym, row["Pazar"])
         st.divider()
         st.subheader("Tüm Portföy Listesi")
         st.dataframe(styled_dataframe(portfoy_only), use_container_width=True, hide_index=True)
@@ -462,7 +492,7 @@ elif selected == "Tümü":
 
 elif selected == "BIST": render_pazar_tab(portfoy_only, "BIST", sym)
 elif selected == "ABD": render_pazar_tab(portfoy_only, "ABD", sym)
-elif selected == "FON": render_pazar_tab(portfoy_only, "FON", sym) # YENİ FON SEKME
+elif selected == "FON": render_pazar_tab(portfoy_only, "FON", sym)
 elif selected == "Emtia": render_pazar_tab(portfoy_only, "EMTIA", sym)
 elif selected == "Fiziki": render_pazar_tab(portfoy_only, "FIZIKI", sym)
 elif selected == "Kripto": render_pazar_tab(portfoy_only, "KRIPTO", sym)
@@ -484,6 +514,8 @@ elif selected == "Satışlar":
 
 elif selected == "Ekle/Çıkar":
     st.header("Varlık Yönetimi")
+    if not portfoy_only.empty:
+        st.download_button(label="📥 Portföyü Excel Olarak İndir", data=portfoy_only.to_csv(index=False).encode('utf-8'), file_name='portfoyum.csv', mime='text/csv')
     tab_ekle, tab_sil = st.tabs(["➕ Ekle", "📉 Sat/Sil"])
     with tab_ekle:
         islem_tipi = st.radio("Tür", ["Portföy", "Takip"], horizontal=True)
