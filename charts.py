@@ -13,29 +13,54 @@ def render_pie_bar_charts(df: pd.DataFrame, group_col: str):
     if df.empty or "Değer" not in df.columns:
         return
 
-    c_p, c_b = st.columns(2)
+    # Pasta biraz daha geniş olsun diye oranlı kolon
+    c_p, c_b = st.columns([3, 2])
 
+    # --- PIE ---
     pie_fig = px.pie(
         df,
         values="Değer",
         names=group_col,
         hole=0.4,
     )
+    pie_fig.update_traces(
+        textinfo="percent+label",
+        textfont_size=18,
+    )
+    pie_fig.update_layout(
+        legend=dict(font=dict(size=12)),
+        margin=dict(t=40, l=0, r=0, b=0),
+    )
     c_p.plotly_chart(pie_fig, use_container_width=True)
 
+    # --- BAR ---
     if "Top. Kâr/Zarar" in df.columns:
         bar_fig = px.bar(
             df.sort_values("Değer"),
             x=group_col,
             y="Değer",
             color="Top. Kâr/Zarar",
+            text="Değer",
         )
     else:
         bar_fig = px.bar(
             df.sort_values("Değer"),
             x=group_col,
             y="Değer",
+            text="Değer",
         )
+
+    bar_fig.update_traces(
+        texttemplate="%{text:,.0f}",
+        textposition="outside",
+    )
+    bar_fig.update_layout(
+        xaxis=dict(tickfont=dict(size=12)),
+        yaxis=dict(tickfont=dict(size=12)),
+        legend=dict(font=dict(size=12)),
+        margin=dict(t=40, l=0, r=0, b=0),
+    )
+
     c_b.plotly_chart(bar_fig, use_container_width=True)
 
 
