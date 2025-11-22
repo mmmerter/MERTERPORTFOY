@@ -80,7 +80,7 @@ st.markdown("""
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
     kod = str(kod).upper()
-    if kod == "TRMET": return "KOZAA.IS"
+    if kod == "TRMET": return "KOZAA.IS" # TRMET FIX
     
     if pazar == "NAKIT": return kod 
     if pazar == "FON": return kod 
@@ -308,7 +308,7 @@ def get_usd_try():
     except: return 34.0
 
 USD_TRY = get_usd_try()
-sym = "₺" if GORUNUM_PB == "TRY" else "$" # FIX
+sym = "₺" if GORUNUM_PB == "TRY" else "$"
 
 mh, ph = get_tickers_data(portfoy_df, USD_TRY)
 st.markdown(f"""<div class="ticker-container market-ticker">{mh}</div><div class="ticker-container portfolio-ticker">{ph}</div>""", unsafe_allow_html=True)
@@ -464,16 +464,28 @@ def render_pazar_tab(df, filter, sym):
     c2.metric("Toplam Kâr/Zarar", f"{sym}{t_pl:,.0f}", delta=f"{t_pl:,.0f}")
     
     st.divider()
+    
+    # BURASI DÜZELTİLDİ: Grafikler geri eklendi
     if filter != "VADELI": 
         c_p, c_b = st.columns(2)
         c_p.plotly_chart(px.pie(sub, values='Değer', names='Kod', hole=0.4), use_container_width=True)
         c_b.plotly_chart(px.bar(sub.sort_values('Değer'), x='Kod', y='Değer', color='Top. Kâr/Zarar'), use_container_width=True)
+        
         if filter not in ["FON", "EMTIA", "NAKIT"]:
-            # Zırhlı Grafik Çağrısı
-            try:
-                h = get_historical_chart(sub, USD_TRY)
-                if h is not None: st.line_chart(h, color="#4CAF50")
-            except: st.warning("Grafik yüklenemedi.")
+             try:
+                 h = get_historical_chart(sub, USD_TRY)
+                 if h is not None: st.line_chart(h, color="#4CAF50")
+             except: st.warning("Tarihsel grafik yüklenemedi.")
+
+    # DETAYLI ANALİZ SEÇİMİ
+    st.divider()
+    st.markdown("#### 🔍 Detaylı Analiz")
+    varlik_listesi = sub["Kod"].unique().tolist()
+    secilen_varlik = st.selectbox(f"İncelemek istediğiniz {filter} varlığını seçin:", varlik_listesi, index=None, placeholder="Seçiniz...")
+    if secilen_varlik:
+        row = sub[sub["Kod"] == secilen_varlik].iloc[0]
+        sym_yahoo = get_yahoo_symbol(row["Kod"], row["Pazar"])
+        render_detail_view(sym_yahoo, row["Pazar"])
 
     st.dataframe(styled_dataframe(sub), use_container_width=True, hide_index=True)
 
@@ -495,7 +507,8 @@ if selected == "Dashboard":
         color_col = 'Top. %'
         spot_only['Gün. %'] = 0
         safe_val = spot_only['Değer'] - spot_only['Gün. Kâr/Zarar']
-        spot_only.loc[safe_val != 0, 'Gün. %'] = (spot_only['Gün. Kâr/Zarar'] / safe_val) * 100
+        spot_only.loc[safe_val != 0, 'Gün. %'] = (spot_only.loc[safe_val != 0, 'Gün. Kâr/Zarar'] / safe_val[safe_val != 0]) * 100
+        
         if map_mode == "Günlük Değişim %": color_col = 'Gün. %'
 
         fig = px.treemap(
@@ -512,7 +525,6 @@ if selected == "Dashboard":
         fig.update_layout(margin=dict(t=0, l=0, r=0, b=0))
         st.plotly_chart(fig, use_container_width=True)
         
-        # Zırhlı Grafik Çağrısı
         try:
             h = get_historical_chart(portfoy_df, USD_TRY)
             if h is not None: st.line_chart(h, color="#4CAF50")
