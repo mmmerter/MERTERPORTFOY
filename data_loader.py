@@ -1,4 +1,3 @@
-# data_loader.py
 import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -11,13 +10,12 @@ import ccxt
 import pandas as pd
 import re
 
-from utils import KNOWN_FUNDS
+from utils import get_yahoo_symbol
 
 SHEET_NAME = "PortfoyData"
 
-# Google Sheet – veri sık değişebilir (ekle/sil yapıyorsun),
-# o yüzden kısa cache / veya hiç kullanma. 30 sn iyi.
-@st.cache_data(ttl=30)
+
+# --- GOOGLE SHEETS ---
 def get_data_from_sheet():
     try:
         scope = [
@@ -30,14 +28,18 @@ def get_data_from_sheet():
         client = gspread.authorize(creds)
         sheet = client.open(SHEET_NAME).sheet1
         data = sheet.get_all_records()
+
         if not data:
             return pd.DataFrame(
                 columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
             )
+
         df = pd.DataFrame(data)
+
         for col in ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]:
             if col not in df.columns:
                 df[col] = ""
+
         if not df.empty:
             df["Pazar"] = df["Pazar"].apply(
                 lambda x: "FON" if "FON" in str(x) else x
@@ -45,13 +47,15 @@ def get_data_from_sheet():
             df["Pazar"] = df["Pazar"].apply(
                 lambda x: "EMTIA" if "FIZIKI" in str(x).upper() else x
             )
+
         return df
     except Exception:
         return pd.DataFrame(
             columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
         )
 
-def save_data_to_sheet(df: pd.DataFrame):
+
+def save_data_to_sheet(df):
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
@@ -63,13 +67,77 @@ def save_data_to_sheet(df: pd.DataFrame):
     sheet = client.open(SHEET_NAME).sheet1
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
-    # Cache'i manuel temizleyelim ki anında güncellensin
-    get_data_from_sheet.clear()
-    get_tickers_data.clear()
 
 
-@st.cache_data(ttl=60 * 60 * 4)  # 4 saat – fon fiyatı günde 1 kez değişiyor
+def get_sales_history():
+    try:
+        scope = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            st.secrets["gcp_service_account"], scope
+        )
+        client = gspread.authorize(creds)
+        sheet = client.open(SHEET_NAME).worksheet("Satislar")
+        data = sheet.get_all_records()
+        if not data:
+            return pd.DataFrame(
+                columns=[
+                    "Tarih",
+                    "Kod",
+                    "Pazar",
+                    "Satılan Adet",
+                    "Satış Fiyatı",
+                    "Maliyet",
+                    "Kâr/Zarar",
+                ]
+            )
+        return pd.DataFrame(data)
+    except Exception:
+        return pd.DataFrame(
+            columns=[
+                "Tarih",
+                "Kod",
+                "Pazar",
+                "Satılan Adet",
+                "Satış Fiyatı",
+                "Maliyet",
+                "Kâr/Zarar",
+            ]
+        )
+
+
+def add_sale_record(date, code, market, qty, price, cost, profit):
+    try:
+        scope = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            st.secrets["gcp_service_account"], scope
+        )
+        client = gspread.authorize(creds)
+        sheet = client.open(SHEET_NAME).worksheet("Satislar")
+        sheet.append_row(
+            [
+                str(date),
+                code,
+                market,
+                float(qty),
+                float(price),
+                float(cost),
+                float(profit),
+            ]
+        )
+    except Exception:
+        pass
+
+
+# --- TEFAS ---
+@st.cache_data(ttl=14400)  # 4 saat – KRAL’dakiyle aynı
 def get_tefas_data(fund_code):
+    # Önce TEFAS HTML parse denemesi
     try:
         url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -83,6 +151,8 @@ def get_tefas_data(fund_code):
                 return last, last
     except Exception:
         pass
+
+    # Olmazsa Crawler ile son 30 gün
     try:
         crawler = Crawler()
         end = datetime.now().strftime("%Y-%m-%d")
@@ -93,10 +163,12 @@ def get_tefas_data(fund_code):
             return float(res["Price"].iloc[-1]), float(res["Price"].iloc[-2])
     except Exception:
         pass
+
     return 0, 0
 
 
-@st.cache_data(ttl=30)  # 30 sn – kripto global veri çok sık değişiyor
+# --- COINGECKO ---
+@st.cache_data(ttl=300)  # 5 dk – KRAL’daki gibi
 def get_crypto_globals():
     try:
         d = requests.get(
@@ -113,7 +185,8 @@ def get_crypto_globals():
         return 0, 0, 0, 0, 0
 
 
-@st.cache_data(ttl=300)  # 5 dk – dolar kuru saniyede değişmiyor
+# --- USD/TRY ---
+@st.cache_data(ttl=300)  # 5 dk – KRAL ile aynı
 def get_usd_try():
     try:
         return yf.Ticker("TRY=X").history(period="1d")["Close"].iloc[-1]
@@ -121,11 +194,30 @@ def get_usd_try():
         return 34.0
 
 
-@st.cache_data(ttl=60)  # 1 dk – piyasa ticker’ları için makul
-def get_tickers_data(df_portfolio, usd_try):
-    from utils import get_yahoo_symbol  # circular import önlemek için
+# --- HABERLER ---
+@st.cache_data(ttl=300)
+def get_financial_news(topic="finance"):
+    urls = {
+        "BIST": "https://news.google.com/rss/search?q=Borsa+Istanbul+Hisseler&hl=tr&gl=TR&ceid=TR:tr",
+        "KRIPTO": "https://news.google.com/rss/search?q=Kripto+Para+Bitcoin&hl=tr&gl=TR&ceid=TR:tr",
+        "GLOBAL": "https://news.google.com/rss/search?q=ABD+Borsaları+Fed&hl=tr&gl=TR&ceid=TR:tr",
+        "DOVIZ": "https://news.google.com/rss/search?q=Dolar+Altın+Piyasa&hl=tr&gl=TR&ceid=TR:tr",
+    }
+    try:
+        feed = feedparser.parse(urls.get(topic, urls["BIST"]))
+        return [
+            {"title": e.title, "link": e.link, "date": e.published}
+            for e in feed.entries[:10]
+        ]
+    except Exception:
+        return []
 
-    total_cap, btc_d, total_3, others_d, others_cap = get_crypto_globals()
+
+# --- TAPE ---
+@st.cache_data(ttl=45)  # KRAL’daki gibi 45 sn
+def get_tickers_data(df_portfolio, usd_try):
+    from .data_loader import get_crypto_globals as _get_crypto_globals  # same module, but ensures latest
+    total_cap, btc_d, total_3, others_d, others_cap = _get_crypto_globals()
 
     market_symbols = [
         ("BIST 100", "XU100.IS"),
@@ -172,7 +264,11 @@ def get_tickers_data(df_portfolio, usd_try):
                     col = "#00e676" if chg >= 0 else "#ff5252"
                     arrow = "▲" if chg >= 0 else "▼"
 
-                    fmt = f"{p:,.2f}" if p > 1 else f"{p:,.4f}"
+                    if p > 1:
+                        fmt = f"{p:,.2f}"
+                    else:
+                        fmt = f"{p:,.4f}"
+
                     if "XU100" in symbol or "^" in symbol:
                         fmt = f"{p:,.0f}"
 
@@ -185,12 +281,14 @@ def get_tickers_data(df_portfolio, usd_try):
                 return ""
             return ""
 
+        # Piyasa
         for name, sym in market_symbols:
             val = get_val(sym, name)
             if val:
                 market_html += f"{val} &nbsp;|&nbsp; "
 
             if name == "ETH/USDT":
+                # Gram Altın
                 try:
                     ons = (
                         yahoo_data.tickers["GC=F"]
@@ -203,6 +301,7 @@ def get_tickers_data(df_portfolio, usd_try):
                     )
                 except Exception:
                     pass
+                # Gram Gümüş
                 try:
                     ons = (
                         yahoo_data.tickers["SI=F"]
@@ -216,6 +315,7 @@ def get_tickers_data(df_portfolio, usd_try):
                 except Exception:
                     pass
 
+        # Kripto global
         if total_cap > 0:
             market_html += (
                 f'BTC.D: <span style="color:#f2a900">% {btc_d:.2f}</span> &nbsp;|&nbsp; '
@@ -224,6 +324,7 @@ def get_tickers_data(df_portfolio, usd_try):
                 f'OTHERS.D: <span style="color:#627eea">% {others_d:.2f}</span> &nbsp;|&nbsp; '
             )
 
+        # Portföy
         if portfolio_symbols:
             for name, sym in portfolio_symbols.items():
                 val = get_val(sym, name)
@@ -234,4 +335,85 @@ def get_tickers_data(df_portfolio, usd_try):
     except Exception:
         market_html, portfolio_html = "Yükleniyor...", "Yükleniyor..."
 
-    return market_html, portfolio_html
+    return (
+        f'<div class="ticker-text animate-market">{market_html} &nbsp;&nbsp;&nbsp; {market_html}</div>',
+        f'<div class="ticker-text animate-portfolio">{portfolio_html} &nbsp;&nbsp;&nbsp; {portfolio_html}</div>',
+    )
+
+
+# --- BINANCE VADELİ ---
+def get_binance_pnl_stats(exchange):
+    try:
+        income = exchange.fetch_income(params={"limit": 1000})
+        now = datetime.now().timestamp() * 1000
+
+        day_ms = 86400000
+        week_ms = 604800000
+        month_ms = 2592000000
+
+        pnl_day = pnl_week = pnl_month = pnl_total = 0
+
+        for inc in income:
+            amount = float(inc["income"])
+            ts = inc["timestamp"]
+            if inc["incomeType"] in ["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"]:
+                pnl_total += amount
+                if now - ts <= day_ms:
+                    pnl_day += amount
+                if now - ts <= week_ms:
+                    pnl_week += amount
+                if now - ts <= month_ms:
+                    pnl_month += amount
+
+        return pnl_day, pnl_week, pnl_month, pnl_total
+    except Exception:
+        return 0, 0, 0, 0
+
+
+def get_binance_positions(api_key, api_secret):
+    try:
+        exchange = ccxt.binance(
+            {
+                "apiKey": api_key,
+                "secret": api_secret,
+                "options": {"defaultType": "future"},
+            }
+        )
+
+        balance = exchange.fetch_balance()
+        total_wallet = balance["total"]["USDT"]
+        total_unrealized = balance["info"]["totalUnrealizedProfit"]
+        total_equity = float(balance["info"]["totalMarginBalance"])
+
+        p_day, p_week, p_month, p_total = get_binance_pnl_stats(exchange)
+
+        positions = exchange.fetch_positions()
+        active_positions = []
+
+        for pos in positions:
+            if float(pos["info"]["positionAmt"]) != 0:
+                side = "🟢 LONG" if float(pos["info"]["positionAmt"]) > 0 else "🔴 SHORT"
+                active_positions.append(
+                    {
+                        "Sembol": pos["symbol"],
+                        "Yön": side,
+                        "Lev": f"{pos['leverage']}x",
+                        "Giriş": float(pos["entryPrice"]),
+                        "Mark": float(pos["markPrice"]),
+                        "PNL": float(pos["unrealizedPnl"]),
+                        "ROE %": round(float(pos["percentage"]), 2),
+                    }
+                )
+
+        stats = {
+            "wallet": total_wallet,
+            "equity": total_equity,
+            "unrealized": float(total_unrealized),
+            "pnl_day": p_day,
+            "pnl_week": p_week,
+            "pnl_month": p_month,
+        }
+
+        return stats, pd.DataFrame(active_positions)
+    except Exception as e:
+        return None, str(e)
