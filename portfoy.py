@@ -212,11 +212,7 @@ def get_binance_positions(api_key, api_secret):
 
         for pos in positions:
             if float(pos["info"]["positionAmt"]) != 0:
-                side = (
-                    "🟢 LONG"
-                    if float(pos["info"]["positionAmt"]) > 0
-                    else "🔴 SHORT"
-                )
+                side = "🟢 LONG" if float(pos["info"]["positionAmt"]) > 0 else "🔴 SHORT"
                 active_positions.append(
                     {
                         "Sembol": pos["symbol"],
@@ -252,9 +248,7 @@ def get_tefas_data(fund_code):
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=5)
         if r.status_code == 200:
-            match = re.search(
-                r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text
-            )
+            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
             if match:
                 last = float(match.group(1).replace(",", "."))
                 return last, last
@@ -266,9 +260,7 @@ def get_tefas_data(fund_code):
         crawler = Crawler()
         end = datetime.now().strftime("%Y-%m-%d")
         start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        res = crawler.fetch(
-            start=start, end=end, name=fund_code, columns=["Price"]
-        )
+        res = crawler.fetch(start=start, end=end, name=fund_code, columns=["Price"])
         if not res.empty:
             res = res.sort_index()
             return float(res["Price"].iloc[-1]), float(res["Price"].iloc[-2])
@@ -592,10 +584,7 @@ def styled_dataframe(df: pd.DataFrame):
     format_dict = {}
     for col in df.columns:
         if df[col].dtype in ["float64", "float32", "int64", "int32"]:
-            if "%" in col:
-                format_dict[col] = "{:,.2f}"
-            else:
-                format_dict[col] = "{:,.2f}"
+            format_dict[col] = "{:,.2f}"
 
     try:
         return df.style.format(format_dict)
@@ -604,10 +593,41 @@ def styled_dataframe(df: pd.DataFrame):
         return df
 
 
+def render_pie_bar_charts(df: pd.DataFrame, group_col: str):
+    """Pastayı ve bar chart'ı tek yerden üretir."""
+    if df.empty or "Değer" not in df.columns:
+        return
+
+    c_p, c_b = st.columns(2)
+
+    pie_fig = px.pie(
+        df,
+        values="Değer",
+        names=group_col,
+        hole=0.4,
+    )
+    c_p.plotly_chart(pie_fig, use_container_width=True)
+
+    if "Top. Kâr/Zarar" in df.columns:
+        bar_fig = px.bar(
+            df.sort_values("Değer"),
+            x=group_col,
+            y="Değer",
+            color="Top. Kâr/Zarar",
+        )
+    else:
+        bar_fig = px.bar(
+            df.sort_values("Değer"),
+            x=group_col,
+            y="Değer",
+        )
+    c_b.plotly_chart(bar_fig, use_container_width=True)
+
+
 def get_historical_chart(df_portfolio: pd.DataFrame, usd_try: float):
     """
     Şimdilik stub: Hata vermemesi için None dönüyor.
-    İleride portföy tarihsel performansını hesaplayarak burayı doldurabiliriz.
+    İleride portföy tarihsel performansını hesaplayarak doldurabiliriz.
     """
     return None
 
@@ -946,9 +966,7 @@ def run_analysis(df, usd_try_rate, view_currency):
             val_native = curr * adet
             cost_native = maliyet * adet
 
-        daily_chg_native = (
-            (curr - prev) * adet if "VADELI" not in pazar else 0
-        )
+        daily_chg_native = (curr - prev) * adet if "VADELI" not in pazar else 0
 
         # Görünüm para birimine çeviri
         if GORUNUM_PB == "TRY":
@@ -1037,20 +1055,8 @@ def render_pazar_tab(df, filter_key, symb):
     st.divider()
 
     if filter_key != "VADELI":
-        c_p, c_b = st.columns(2)
-        c_p.plotly_chart(
-            px.pie(sub, values="Değer", names="Kod", hole=0.4),
-            use_container_width=True,
-        )
-        c_b.plotly_chart(
-            px.bar(
-                sub.sort_values("Değer"),
-                x="Kod",
-                y="Değer",
-                color="Top. Kâr/Zarar",
-            ),
-            use_container_width=True,
-        )
+        # Sekmeye göre (BIST, ABD, FON vb.) varlık bazlı grafik
+        render_pie_bar_charts(sub, "Kod")
 
         if filter_key not in ["FON", "EMTIA", "NAKIT"]:
             try:
@@ -1083,6 +1089,17 @@ if selected == "Dashboard":
 
         st.divider()
 
+        # --- Pazar bazlı donut + bar ---
+        st.subheader("📊 Pazarlara Göre Dağılım")
+        dash_pazar = (
+            spot_only.groupby("Pazar", as_index=False)
+            .agg({"Değer": "sum", "Top. Kâr/Zarar": "sum"})
+        )
+        render_pie_bar_charts(dash_pazar, "Pazar")
+
+        st.divider()
+
+        # --- Isı haritası ---
         c_tree_1, c_tree_2 = st.columns([3, 1])
         with c_tree_1:
             st.subheader("🗺️ Portföy Isı Haritası")
@@ -1099,9 +1116,7 @@ if selected == "Dashboard":
         safe_val = spot_only["Değer"] - spot_only["Gün. Kâr/Zarar"]
         non_zero = safe_val != 0
         spot_only.loc[non_zero, "Gün. %"] = (
-            spot_only.loc[non_zero, "Gün. Kâr/Zarar"]
-            / safe_val[non_zero]
-            * 100
+            spot_only.loc[non_zero, "Gün. Kâr/Zarar"] / safe_val[non_zero] * 100
         )
 
         if map_mode == "Günlük Değişim %":
@@ -1135,11 +1150,19 @@ if selected == "Dashboard":
         st.info("Boş.")
 
 elif selected == "Tümü":
-    st.dataframe(
-        styled_dataframe(portfoy_only),
-        use_container_width=True,
-        hide_index=True,
-    )
+    if not portfoy_only.empty:
+        st.subheader("📊 Varlık Bazlı Dağılım (Tümü)")
+        render_pie_bar_charts(portfoy_only, "Kod")
+
+        st.divider()
+
+        st.dataframe(
+            styled_dataframe(portfoy_only),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Portföy boş.")
 
 elif selected == "Vadeli":
     st.subheader("🚀 Vadeli İşlemler")
@@ -1177,6 +1200,40 @@ elif selected == "Emtia":
 
 elif selected == "Kripto":
     render_pazar_tab(portfoy_only, "KRIPTO", sym)
+
+elif selected == "Haberler":
+    tab1, tab2, tab3, tab4 = st.tabs(["BIST", "Kripto", "Global", "Döviz"])
+    with tab1:
+        render_news_section("BIST Haberleri", "BIST")
+    with tab2:
+        render_news_section("Kripto Haberleri", "KRIPTO")
+    with tab3:
+        render_news_section("Global Piyasalar", "GLOBAL")
+    with tab4:
+        render_news_section("Döviz / Altın", "DOVIZ")
+
+elif selected == "İzleme":
+    st.subheader("👁️ İzleme Listesi")
+    if not takip_only.empty:
+        st.dataframe(
+            styled_dataframe(takip_only),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("İzleme listesi boş.")
+
+elif selected == "Satışlar":
+    st.subheader("🧾 Satış Geçmişi")
+    sales_df = get_sales_history()
+    if not sales_df.empty:
+        st.dataframe(
+            styled_dataframe(sales_df),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Satış kaydı yok.")
 
 elif selected == "Ekle/Çıkar":
     st.header("Varlık Yönetimi")
