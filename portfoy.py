@@ -113,6 +113,20 @@ def get_yahoo_symbol(kod, pazar):
         return kod
     return kod 
 
+# --- AKILLI SAYI ÇEVİRİCİ (GİRİŞ HATALARINI ÖNLER) ---
+def smart_parse(text_val):
+    val = str(text_val).strip()
+    if not val: return 0.0
+    # 1.000,50 gibi hem nokta hem virgül varsa
+    if "." in val and "," in val:
+        val = val.replace(".", "").replace(",", ".")
+    # Sadece virgül varsa (10,5) -> 10.5
+    elif "," in val:
+        val = val.replace(",", ".")
+    # Sadece nokta varsa (Python dostu), dokunma.
+    try: return float(val)
+    except: return 0.0
+
 # --- TEFAS FON VERİSİ ---
 @st.cache_data(ttl=14400) 
 def get_tefas_data(fund_code):
@@ -506,7 +520,6 @@ def run_analysis(df, usd_try_rate, view_currency):
         
         pnl = val_goster - cost_goster
         pnl_pct = (pnl / cost_goster * 100) if cost_goster > 0 else 0
-        
         results.append({
             "Kod": kod, "Pazar": pazar, "Tip": row["Tip"],
             "Adet": adet, "Maliyet": maliyet,
@@ -687,7 +700,6 @@ elif selected == "Ekle/Çıkar":
             mime='text/csv',
         )
     
-    # --- AKILLI SAYI ÇEVİRİCİ ---
     def smart_parse(text_val):
         val = str(text_val).strip()
         if not val: return 0.0
@@ -714,12 +726,11 @@ elif selected == "Ekle/Çıkar":
             adet_str = c1.text_input("Adet (Örn: 10,5)", value="0")
             maliyet_str = c2.text_input("Maliyet (Örn: 30,26)", value="0")
             
-            # Önizleme
             try:
                 a_val = smart_parse(adet_str)
                 m_val = smart_parse(maliyet_str)
-                c1.caption(f"Algılanan: {a_val:,.3f}")
-                c2.caption(f"Algılanan: {m_val:,.2f}")
+                c1.caption(f"Algılanan: {a_val:g}")
+                c2.caption(f"Algılanan: {m_val:g}")
             except: pass
 
             not_inp = st.text_input("Not")
@@ -750,7 +761,6 @@ elif selected == "Ekle/Çıkar":
         if not portfoy_df.empty:
             varliklar = portfoy_df[portfoy_df["Tip"] == "Portfoy"]["Kod"].unique()
             
-            # 1. SATIŞ
             st.markdown("#### 💰 Satış Yap (Kâr/Zarar İşler)")
             with st.form("sell_asset_form"):
                 satilacak_kod = st.selectbox("Satılacak Varlık", varliklar)
@@ -759,20 +769,20 @@ elif selected == "Ekle/Çıkar":
                     mevcut_adet = float(mevcut_veri["Adet"])
                     mevcut_maliyet = float(mevcut_veri["Maliyet"])
                     pazar_yeri = mevcut_veri["Pazar"]
-                    st.info(f"Elinizdeki: **{mevcut_adet}** Adet | Ort. Maliyet: **{mevcut_maliyet}**")
+                    st.info(f"Elinizdeki: **{mevcut_adet:g}** Adet | Ort. Maliyet: **{mevcut_maliyet:g}**")
                 else:
                     mevcut_adet = 0
+                    mevcut_maliyet = 0
 
                 c1, c2 = st.columns(2)
                 satilan_str = c1.text_input("Satılacak Adet", value="0")
                 fiyat_str = c2.text_input("Satış Fiyatı", value="0")
                 
-                # Önizleme
                 try:
                     s_adet = smart_parse(satilan_str)
                     s_fiyat = smart_parse(fiyat_str)
-                    c1.caption(f"Algılanan: {s_adet}")
-                    c2.caption(f"Algılanan: {s_fiyat}")
+                    c1.caption(f"Algılanan: {s_adet:g}")
+                    c2.caption(f"Algılanan: {s_fiyat:g}")
                 except: pass
                 
                 if st.form_submit_button("✅ Satışı Onayla", type="primary"):
@@ -790,7 +800,7 @@ elif selected == "Ekle/Çıkar":
                                 msg = f"{satilacak_kod} tamamen satıldı."
                             else: 
                                 portfoy_df.loc[portfoy_df["Kod"] == satilacak_kod, "Adet"] = yeni_adet
-                                msg = f"{s_adet} adet satıldı. Kalan: {yeni_adet}"
+                                msg = f"{s_adet:g} adet satıldı. Kalan: {yeni_adet:g}"
                                 
                             save_data_to_sheet(portfoy_df)
                             st.success(msg)
@@ -800,7 +810,6 @@ elif selected == "Ekle/Çıkar":
 
             st.markdown("---")
 
-            # 2. DİREKT SİLME
             st.markdown("#### 🗑️ Kaydı Direkt Sil (Hesapsız)")
             with st.form("delete_row_form"):
                 silinecek_kod = st.selectbox("Silinecek Varlık Seçin", varliklar, key="sil_box")
