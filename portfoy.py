@@ -77,7 +77,7 @@ st.markdown("""
 
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
-    if "FON" in pazar: return kod 
+    if pazar == "FON": return kod 
     if "BIST" in pazar: return f"{kod}.IS" if not kod.endswith(".IS") else kod
     elif "KRIPTO" in pazar: return f"{kod}-USD" if not kod.endswith("-USD") else kod
     elif "EMTIA" in pazar:
@@ -102,42 +102,43 @@ def smart_parse(text_val):
     try: return float(val)
     except: return 0.0
 
-# --- TEFAS VERİSİ (ÇİFT MOTORLU) ---
+# --- TEFAS FON VERİSİ (ÇİFT MOTORLU GÜÇLENDİRME) ---
 @st.cache_data(ttl=3600) 
 def get_tefas_data(fund_code):
     fund_code = fund_code.upper()
     
-    # 1. YÖNTEM: DİREKT WEB KAZIMA (EN GÜVENİLİR)
+    # 1. YÖNTEM: TEFAS WEB SİTESİNDEN DİREKT ÇEKME (Scraping)
     try:
         url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
-            # HTML içinden fiyatı Regex ile bul
-            # Genellikle: <span id="MainContent_PanelInfo_lblPrice">1,863680</span>
+            # HTML içindeki fiyatı Regex ile buluyoruz
             match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', response.text)
             if match:
                 price_str = match.group(1).replace(",", ".")
                 current_price = float(price_str)
-                # Önceki fiyatı bulmak zor, şimdilik değişim için aynı değeri dönüyoruz
-                # (Veya değişim yüzdesini de çekebiliriz ama karmaşıklığı artırmayalım)
-                return current_price, current_price 
+                return current_price, current_price # Önceki fiyatı webden bulmak zor, şimdilik aynı dönüyoruz
     except:
         pass
 
-    # 2. YÖNTEM: KÜTÜPHANE (YEDEK)
+    # 2. YÖNTEM: KÜTÜPHANE (Yedek)
     try:
         crawler = Crawler()
+        # 30 günlük veri iste (Tatiller için garanti olsun)
         end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=15)).strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        
         result = crawler.fetch(start=start_date, end=end_date, name=fund_code, columns=["Price"])
+        
         if not result.empty:
-            current_price = result["Price"].iloc[0]
-            prev_price = result["Price"].iloc[1] if len(result) > 1 else current_price
-            return current_price, prev_price
+            result = result.sort_index()
+            current_price = result["Price"].iloc[-1]
+            prev_price = result["Price"].iloc[-2] if len(result) > 1 else current_price
+            return float(current_price), float(prev_price)
     except:
         pass
-
+        
     return 0, 0
 
 # --- COINGECKO GLOBAL VERİ ---
@@ -253,7 +254,7 @@ def get_tickers_data(df_portfolio, usd_try):
         for _, row in assets.iterrows():
             kod = row['Kod']
             pazar = row['Pazar']
-            if "Fiziki" not in pazar and "Gram" not in kod and "FON" not in pazar:
+            if "Fiziki" not in pazar and "Gram" not in kod and pazar != "FON":
                 sym = get_yahoo_symbol(kod, pazar)
                 portfolio_symbols[kod] = sym
 
@@ -390,7 +391,7 @@ MARKET_DATA = {
 def render_detail_view(symbol, pazar):
     st.markdown(f"### 🔎 {symbol} Detaylı Analizi")
     
-    if "FON" in pazar:
+    if pazar == "FON":
         price, _ = get_tefas_data(symbol)
         st.metric(f"{symbol} Son Fiyat", f"₺{price:,.6f}")
         st.info("Yatırım fonları için anlık grafik desteği TEFAS kaynaklı sınırlıdır.")
@@ -443,17 +444,22 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU (ÇİFT MOTORLU + KORUMALI) ---
+# --- HESAPLAMA MOTORU (DÜZELTİLMİŞ) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
+    
+    KNOWN_FUNDS = ["YHB", "TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "OJT", "HKH", "IPB", "KZL", "RPD"]
+
     for i, row in df.iterrows():
         kod = row.get("Kod", "")
         pazar_raw = row.get("Pazar", "")
         
-        # OTOMATİK FON TANIMA
-        KNOWN_FUNDS = ["YHB", "TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "OJT", "HKH", "IPB", "KZL", "RPD"]
-        pazar = "FON" if kod in KNOWN_FUNDS else pazar_raw
+        # Fon Tanıma
+        if kod in KNOWN_FUNDS:
+            pazar = "FON"
+        else:
+            pazar = pazar_raw
 
         adet = smart_parse(row.get("Adet", 0))
         maliyet = smart_parse(row.get("Maliyet", 0))
@@ -490,12 +496,16 @@ def run_analysis(df, usd_try_rate, view_currency):
             curr_price = maliyet
             prev_close = maliyet
         
-        # FİYAT ÇEKİLEMEZSE 0 YAZMA, MALİYETİ KULLAN (Nötr)
+        # FİYAT ÇEKİLEMEZSE 0 YAPMALIYIZ Kİ HATA OLDUĞU ANLAŞILSIN
+        # AMA GÜNLÜK KARI PATLATMAMAK İÇİN PREV_CLOSE DA 0 YAPILIR
         if curr_price == 0: 
-            curr_price = maliyet
-            prev_close = maliyet
+            curr_price = maliyet # Gösterim bozulmasın diye maliyet
+            prev_close = maliyet # Değişim 0 çıksın
+            
+        # Eğer Prev Close 0 gelirse (Fonlarda vs), değişimi 0 yap
+        if prev_close == 0: prev_close = curr_price
 
-        # 100 KAT KORUMASI (3026 TL -> 30.26 TL)
+        # 100x Şişme Koruması
         if curr_price > 0 and maliyet > 0:
             if (maliyet / curr_price) > 50: 
                 maliyet = maliyet / 100
@@ -726,8 +736,8 @@ elif selected == "Ekle/Çıkar":
             manuel_kod = st.text_input("Veya Manuel Yaz (Örn: TTE)").upper()
             
             c1, c2 = st.columns(2)
-            adet_str = c1.text_input("Adet", value="0")
-            maliyet_str = c2.text_input("Maliyet", value="0")
+            adet_str = c1.text_input("Adet (Örn: 119)", value="0")
+            maliyet_str = c2.text_input("Maliyet (Örn: 30,26)", value="0")
             not_inp = st.text_input("Not")
 
             try:
