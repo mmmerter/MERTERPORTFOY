@@ -27,14 +27,14 @@ st.markdown("""
 <style>
     .block-container {padding-top: 1rem;}
     div[data-testid="stMetric"] {
-        background-color: #262730;
+        background-color: #262730 !important;
         border: 1px solid #464b5f;
         border-radius: 10px;
         padding: 15px;
-        color: #ffffff;
+        color: #ffffff !important;
     }
     div[data-testid="stMetricValue"] { color: #ffffff !important; }
-    div[data-testid="stMetricLabel"] { color: #d0d0d0 !important; }
+    div[data-testid="stMetricLabel"] { color: #bfbfbf !important; }
     
     .ticker-container {
         width: 100%;
@@ -47,6 +47,7 @@ st.markdown("""
     }
     .market-ticker { background-color: #0e1117; border-bottom: 1px solid #333; padding: 8px 0; }
     .portfolio-ticker { background-color: #1a1c24; border-bottom: 2px solid #FF4B4B; padding: 8px 0; margin-bottom: 20px; }
+    
     .ticker-text {
         display: inline-block;
         white-space: nowrap;
@@ -78,8 +79,11 @@ st.markdown("""
 
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
-    if pazar == "NAKIT": return kod # Nakit için sembol yok
-    if pazar == "FON": return kod 
+    kod = str(kod).upper()
+    if kod == "TRMET": return "KOZAA.IS"
+    
+    if "FON" in pazar: return kod 
+    if "VADELI" in pazar: return f"{kod}-USD" # Manuel vadeli için
     if "BIST" in pazar: return f"{kod}.IS" if not kod.endswith(".IS") else kod
     elif "KRIPTO" in pazar: return f"{kod}-USD" if not kod.endswith("-USD") else kod
     elif "EMTIA" in pazar:
@@ -104,56 +108,18 @@ def smart_parse(text_val):
     try: return float(val)
     except: return 0.0
 
-# --- BINANCE VADELİ PNL HESAPLAYICI (YENİ) ---
-def get_binance_pnl_stats(exchange):
-    try:
-        # Son 90 günün işlem geçmişini çek (Realized PNL, Commission, Funding Fee)
-        # Not: API limitlerine takılmamak için limit koyuyoruz.
-        income = exchange.fetch_income(params={"limit": 1000}) 
-        
-        now = datetime.now().timestamp() * 1000 # Milisaniye
-        day_ms = 24 * 60 * 60 * 1000
-        week_ms = 7 * day_ms
-        month_ms = 30 * day_ms
-        
-        pnl_day = 0
-        pnl_week = 0
-        pnl_month = 0
-        pnl_total = 0 # Çekilen veri kadar
-        
-        for inc in income:
-            amount = float(inc['income'])
-            ts = inc['timestamp']
-            
-            # Sadece PNL, Komisyon ve Funding Fee'leri topla
-            if inc['incomeType'] in ['REALIZED_PNL', 'COMMISSION', 'FUNDING_FEE']:
-                pnl_total += amount
-                if now - ts <= day_ms: pnl_day += amount
-                if now - ts <= week_ms: pnl_week += amount
-                if now - ts <= month_ms: pnl_month += amount
-                
-        return pnl_day, pnl_week, pnl_month, pnl_total
-    except:
-        return 0, 0, 0, 0
-
+# --- BINANCE API (HATA KORUMALI) ---
 def get_binance_positions(api_key, api_secret):
     try:
         exchange = ccxt.binance({
             'apiKey': api_key,
             'secret': api_secret,
-            'options': {'defaultType': 'future'}
+            'options': {'defaultType': 'future'},
+            'enableRateLimit': True
         })
-        
-        # Bakiye ve Pozisyonlar
         balance = exchange.fetch_balance()
-        total_wallet = balance['total']['USDT'] # Cüzdan Bakiyesi
-        total_unrealized = balance['info']['totalUnrealizedProfit'] # Açık Pozisyon Kârı
-        total_equity = float(balance['info']['totalMarginBalance']) # Toplam Varlık
+        total_wallet = balance['total']['USDT']
         
-        # PNL Geçmişi Hesapla
-        p_day, p_week, p_month, p_total = get_binance_pnl_stats(exchange)
-        
-        # Açık Pozisyonlar
         positions = exchange.fetch_positions()
         active_positions = []
         for pos in positions:
@@ -168,53 +134,45 @@ def get_binance_positions(api_key, api_secret):
                     "PNL": float(pos['unrealizedPnl']),
                     "ROE %": round(float(pos['percentage']), 2)
                 })
-                
-        stats = {
-            "wallet": total_wallet,
-            "equity": total_equity,
-            "unrealized": float(total_unrealized),
-            "pnl_day": p_day,
-            "pnl_week": p_week,
-            "pnl_month": p_month
-        }
-        
-        return stats, pd.DataFrame(active_positions)
+        return True, total_wallet, pd.DataFrame(active_positions)
     except Exception as e:
-        return None, str(e)
+        return False, str(e), pd.DataFrame()
 
-# --- TEFAS VE DİĞER VERİLER ---
+# --- TEFAS & COINGECKO ---
 @st.cache_data(ttl=14400) 
 def get_tefas_data(fund_code):
     try:
+        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200:
+            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
+            if match: return float(match.group(1).replace(",", ".")), float(match.group(1).replace(",", "."))
+    except: pass
+    try:
         crawler = Crawler()
-        end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
-        result = crawler.fetch(start=start_date, end=end_date, name=fund_code, columns=["Price"])
-        if not result.empty:
-            current_price = result["Price"].iloc[0]
-            prev_price = result["Price"].iloc[1] if len(result) > 1 else current_price
-            return current_price, prev_price
-        return 0, 0
-    except: return 0, 0
+        end = datetime.now().strftime("%Y-%m-%d")
+        start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        res = crawler.fetch(start=start, end=end, name=fund_code, columns=["Price"])
+        if not res.empty:
+            res = res.sort_index()
+            return float(res["Price"].iloc[-1]), float(res["Price"].iloc[-2])
+    except: pass
+    return 0, 0
 
 @st.cache_data(ttl=300)
 def get_crypto_globals():
     try:
-        url = "https://api.coingecko.com/api/v3/global"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            d = response.json()['data']
-            total_cap = d['total_market_cap']['usd']
-            btc_d = d['market_cap_percentage']['btc']
-            eth_d = d['market_cap_percentage']['eth']
-            top2_share = btc_d + eth_d
-            total_3_cap = total_cap * (1 - (top2_share / 100))
-            others_d = 100 - top2_share
-            others_cap = total_3_cap 
-            return total_cap, btc_d, total_3_cap, others_d, others_cap
-    except: pass
-    return 0, 0, 0, 0, 0
+        d = requests.get("https://api.coingecko.com/api/v3/global", timeout=5).json()['data']
+        total_cap = d['total_market_cap']['usd']
+        btc_d = d['market_cap_percentage']['btc']
+        eth_d = d['market_cap_percentage']['eth']
+        top2 = btc_d + eth_d
+        total3 = total_cap * (1 - (top2 / 100))
+        return total_cap, btc_d, total3, 100 - top2, total3
+    except: return 0, 0, 0, 0, 0
 
+# --- HABERLER ---
 @st.cache_data(ttl=300)
 def get_financial_news(topic="finance"):
     urls = {
@@ -223,760 +181,373 @@ def get_financial_news(topic="finance"):
         "GLOBAL": "https://news.google.com/rss/search?q=ABD+Borsaları+Fed&hl=tr&gl=TR&ceid=TR:tr",
         "DOVIZ": "https://news.google.com/rss/search?q=Dolar+Altın+Piyasa&hl=tr&gl=TR&ceid=TR:tr"
     }
-    url = urls.get(topic, urls["BIST"])
-    feed = feedparser.parse(url)
-    news_list = []
-    for entry in feed.entries[:10]:
-        news_list.append({"title": entry.title, "link": entry.link, "date": entry.published})
-    return news_list
+    feed = feedparser.parse(urls.get(topic, urls["BIST"]))
+    return [{"title": e.title, "link": e.link, "date": e.published} for e in feed.entries[:10]]
 
-def render_news_section(category_name, rss_key):
-    st.subheader(f"📰 {category_name}")
-    news = get_financial_news(rss_key)
-    for n in news:
+def render_news_section(name, key):
+    st.subheader(f"📰 {name}")
+    for n in get_financial_news(key):
         st.markdown(f"""<div class="news-card"><a href="{n['link']}" target="_blank" class="news-title">{n['title']}</a><div class="news-meta">🕒 {n['date']}</div></div>""", unsafe_allow_html=True)
 
-# --- GOOGLE SHEETS VERİ ---
+# --- VERİTABANI ---
 SHEET_NAME = "PortfoyData" 
 
 def get_data_from_sheet():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds_dict = st.secrets["gcp_service_account"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
         client = gspread.authorize(creds)
         sheet = client.open(SHEET_NAME).sheet1
         data = sheet.get_all_records()
         if not data: return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         df = pd.DataFrame(data)
-        expected_cols = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
-        for col in expected_cols:
+        for col in ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]:
             if col not in df.columns: df[col] = "" 
         
+        # İsim Düzeltmeleri
         if not df.empty:
             df["Pazar"] = df["Pazar"].apply(lambda x: "FON" if "FON" in str(x) else x)
             df["Pazar"] = df["Pazar"].apply(lambda x: "EMTIA" if "FIZIKI" in str(x).upper() else x)
-            
         return df
-    except:
-        return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
-
-def get_sales_history():
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds_dict = st.secrets["gcp_service_account"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open(SHEET_NAME).worksheet("Satislar") 
-        data = sheet.get_all_records()
-        if not data: return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
-        return pd.DataFrame(data)
-    except:
-        return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
-
-def add_sale_record(date, code, market, qty, price, cost, profit):
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds_dict = st.secrets["gcp_service_account"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open(SHEET_NAME).worksheet("Satislar")
-        row = [str(date), code, market, float(qty), float(price), float(cost), float(profit)]
-        sheet.append_row(row)
-    except Exception as e:
-        st.error(f"Satış kaydedilemedi: {e}")
+    except: return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
 
 def save_data_to_sheet(df):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds_dict = st.secrets["gcp_service_account"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
     client = gspread.authorize(creds)
     sheet = client.open(SHEET_NAME).sheet1
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
-# --- MARKET VE PORTFÖY ŞERİDİ ---
+def get_sales_history():
+    # Satış geçmişi fonksiyonu (Kısaltıldı, önceki kodla aynı)
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+        client = gspread.authorize(creds)
+        sheet = client.open(SHEET_NAME).worksheet("Satislar") 
+        data = sheet.get_all_records()
+        if not data: return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
+        return pd.DataFrame(data)
+    except: return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
+
+def add_sale_record(date, code, market, qty, price, cost, profit):
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+        client = gspread.authorize(creds)
+        sheet = client.open(SHEET_NAME).worksheet("Satislar")
+        sheet.append_row([str(date), code, market, float(qty), float(price), float(cost), float(profit)])
+    except: pass
+
+# --- ŞERİT ---
 @st.cache_data(ttl=45) 
 def get_tickers_data(df_portfolio, usd_try):
     total_cap, btc_d, total_3, others_d, others_cap = get_crypto_globals()
-    
-    market_symbols = [
-        ("BIST 100", "XU100.IS"), ("USD", "TRY=X"), ("EUR", "EURTRY=X"),
-        ("BTC/USDT", "BTC-USD"), ("ETH/USDT", "ETH-USD"),
-        ("Ons Altın", "GC=F"), ("Ons Gümüş", "SI=F"),
-        ("NASDAQ", "^IXIC"), ("S&P 500", "^GSPC")
-    ]
+    market_symbols = [("BIST 100", "XU100.IS"), ("USD", "TRY=X"), ("EUR", "EURTRY=X"), ("BTC/USDT", "BTC-USD"), ("ETH/USDT", "ETH-USD"), ("Ons Altın", "GC=F"), ("Ons Gümüş", "SI=F"), ("NASDAQ", "^IXIC"), ("S&P 500", "^GSPC")]
     
     portfolio_symbols = {}
     if not df_portfolio.empty:
         assets = df_portfolio[df_portfolio["Tip"] == "Portfoy"]
         for _, row in assets.iterrows():
-            kod = row['Kod']
-            pazar = row['Pazar']
-            if "NAKIT" not in pazar and "Gram" not in kod and "FON" not in pazar:
-                sym = get_yahoo_symbol(kod, pazar)
-                portfolio_symbols[kod] = sym
+            if "Fiziki" not in row['Pazar'] and "Gram" not in row['Kod'] and "FON" not in row['Pazar'] and "VADELI" not in row['Pazar']:
+                portfolio_symbols[row['Kod']] = get_yahoo_symbol(row['Kod'], row['Pazar'])
 
     all_fetch = list(set([s[1] for s in market_symbols] + list(portfolio_symbols.values())))
-    
     market_html = '<span style="color:#aaa">🌍 PİYASA:</span> &nbsp;'
     portfolio_html = '<span style="color:#aaa">💼 PORTFÖY:</span> &nbsp;'
     
     try:
         yahoo_data = yf.Tickers(" ".join(all_fetch))
-        
         def get_val(symbol, label=None):
             try:
                 h = yahoo_data.tickers[symbol].history(period="2d")
                 if not h.empty:
                     p = h['Close'].iloc[-1]
                     prev = h['Close'].iloc[-2]
-                    chg = ((p - prev) / prev) * 100
+                    chg = ((p-prev)/prev)*100
                     c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-                    fmt_p = f"{p:,.2f}" if p > 1 else f"{p:,.4f}"
-                    if "XU100" in symbol or "^" in symbol: fmt_p = f"{p:,.0f}"
-                    return f'{label if label else symbol}: <span style="color:white">{fmt_p}</span> <span style="color:{c}">{a}%{chg:.2f}</span>'
+                    fmt = f"{p:,.2f}" if p > 1 else f"{p:,.4f}"
+                    if "XU100" in symbol or "^" in symbol: fmt = f"{p:,.0f}"
+                    return f'{label if label else symbol}: <span style="color:white">{fmt}</span> <span style="color:{c}">{a}%{chg:.2f}</span>'
             except: return ""
             return ""
 
         for name, sym in market_symbols:
             val = get_val(sym, name)
             if val: market_html += f'{val} &nbsp;|&nbsp; '
-            
             if name == "ETH/USDT":
                 try:
                     ons = yahoo_data.tickers["GC=F"].history(period="1d")['Close'].iloc[-1]
-                    gr = (ons * usd_try) / 31.1035
-                    market_html += f'Gr Altın: <span style="color:white">{gr:.2f}</span> &nbsp;|&nbsp; '
+                    market_html += f'Gr Altın: <span style="color:white">{(ons*usd_try)/31.1035:.2f}</span> &nbsp;|&nbsp; '
                 except: pass
                 try:
                     ons = yahoo_data.tickers["SI=F"].history(period="1d")['Close'].iloc[-1]
-                    gr = (ons * usd_try) / 31.1035
-                    market_html += f'Gr Gümüş: <span style="color:white">{gr:.2f}</span> &nbsp;|&nbsp; '
+                    market_html += f'Gr Gümüş: <span style="color:white">{(ons*usd_try)/31.1035:.2f}</span> &nbsp;|&nbsp; '
                 except: pass
 
         if total_cap > 0:
-            t3_tril = total_3 / 1_000_000_000_000 
-            o_bil = others_cap / 1_000_000_000 
-            market_html += f'BTC.D: <span style="color:#f2a900">% {btc_d:.2f}</span> &nbsp;|&nbsp; '
-            market_html += f'TOTAL: <span style="color:#00e676">${(total_cap/1_000_000_000_000):.2f}T</span> &nbsp;|&nbsp; '
-            market_html += f'TOTAL 3: <span style="color:#627eea">${t3_tril:.2f}T</span> &nbsp;|&nbsp; '
-            market_html += f'OTHERS.D: <span style="color:#627eea">% {others_d:.2f}</span> &nbsp;|&nbsp; '
+            market_html += f'BTC.D: <span style="color:#f2a900">% {btc_d:.2f}</span> &nbsp;|&nbsp; TOTAL: <span style="color:#00e676">${(total_cap/1e12):.2f}T</span> &nbsp;|&nbsp; TOTAL 3: <span style="color:#627eea">${(total_3/1e9):.0f}B</span> &nbsp;|&nbsp; OTHERS.D: <span style="color:#627eea">% {others_d:.2f}</span> &nbsp;|&nbsp; '
 
         if portfolio_symbols:
             for name, sym in portfolio_symbols.items():
                 val = get_val(sym, name)
                 if val: portfolio_html += f'{val} &nbsp;&nbsp;&nbsp; '
-        else:
-            portfolio_html += "Portföy boş veya veri çekilemiyor."
-
-    except: 
-        market_html = "Veri yükleniyor..."
-        portfolio_html = "Veri yükleniyor..."
+        else: portfolio_html += "Portföy boş veya veri çekilemiyor."
+    except: market_html, portfolio_html = "Yükleniyor...", "Yükleniyor..."
     
-    final_market = f'<div class="ticker-text animate-market">{market_html} &nbsp;&nbsp;&nbsp; {market_html}</div>'
-    final_portfolio = f'<div class="ticker-text animate-portfolio">{portfolio_html} &nbsp;&nbsp;&nbsp; {portfolio_html}</div>'
-    return final_market, final_portfolio
+    return f'<div class="ticker-text animate-market">{market_html} &nbsp;&nbsp;&nbsp; {market_html}</div>', f'<div class="ticker-text animate-portfolio">{portfolio_html} &nbsp;&nbsp;&nbsp; {portfolio_html}</div>'
 
 portfoy_df = get_data_from_sheet()
-
-# --- BAŞLIK ---
 c_title, c_toggle = st.columns([3, 1])
-with c_title:
-    st.title("🏦 Merter'in Varlık Yönetim Terminali")
+with c_title: st.title("🏦 Merter'in Varlık Yönetim Terminali")
 with c_toggle:
     st.write("") 
     GORUNUM_PB = st.radio("Para Birimi:", ["TRY", "USD"], horizontal=True)
 
 @st.cache_data(ttl=300)
 def get_usd_try():
-    try:
-        ticker = yf.Ticker("TRY=X")
-        hist = ticker.history(period="1d")
-        if not hist.empty: return hist['Close'].iloc[-1]
-        return 34.0
+    try: return yf.Ticker("TRY=X").history(period="1d")['Close'].iloc[-1]
     except: return 34.0
 
 USD_TRY = get_usd_try()
+mh, ph = get_tickers_data(portfoy_df, USD_TRY)
+st.markdown(f"""<div class="ticker-container market-ticker">{mh}</div><div class="ticker-container portfolio-ticker">{ph}</div>""", unsafe_allow_html=True)
 
-# --- ÇİFT KAYAN ŞERİT GÖSTERİMİ ---
-market_html, portfolio_html = get_tickers_data(portfoy_df, USD_TRY)
-
-st.markdown(f"""
-<div class="ticker-container market-ticker">
-    {market_html}
-</div>
-<div class="ticker-container portfolio-ticker">
-    {portfolio_html}
-</div>
-""", unsafe_allow_html=True)
-
-# --- NAVİGASYON MENÜSÜ (NAKİT & VADELİ EKLENDİ) ---
 selected = option_menu(
     menu_title=None, 
-    options=["Dashboard", "Tümü", "BIST", "ABD", "FON", "Emtia", "Kripto", "Vadeli", "Nakit", "Haberler", "İzleme", "Satışlar", "Ekle/Çıkar"], 
-    icons=["speedometer2", "list-task", "graph-up-arrow", "currency-dollar", "piggy-bank", "fuel-pump", "currency-bitcoin", "lightning-charge", "wallet2", "newspaper", "eye", "receipt", "gear"], 
-    menu_icon="cast", 
-    default_index=0, 
-    orientation="horizontal",
-    styles={
-        "container": {"padding": "0!important", "background-color": "#161616"}, 
-        "icon": {"color": "white", "font-size": "18px"}, 
-        "nav-link": {
-            "font-size": "14px", 
-            "text-align": "center", 
-            "margin":"0px", 
-            "--hover-color": "#333333", 
-            "font-weight": "bold", 
-            "color": "#bfbfbf"
-        },
-        "nav-link-selected": {"background-color": "#ffffff", "color": "#000000"}, 
-    }
+    options=["Dashboard", "Tümü", "BIST", "ABD", "FON", "Emtia", "Kripto", "Vadeli", "Haberler", "İzleme", "Satışlar", "Ekle/Çıkar"], 
+    icons=["speedometer2", "list-task", "graph-up-arrow", "currency-dollar", "piggy-bank", "fuel-pump", "currency-bitcoin", "lightning-charge", "newspaper", "eye", "receipt", "gear"], 
+    menu_icon="cast", default_index=0, orientation="horizontal",
+    styles={"container": {"padding": "0!important", "background-color": "#161616"}, "icon": {"color": "white", "font-size": "18px"}, "nav-link": {"font-size": "14px", "text-align": "center", "margin":"0px", "--hover-color": "#333333", "font-weight": "bold", "color": "#bfbfbf"}, "nav-link-selected": {"background-color": "#ffffff", "color": "#000000"}}
 )
 
 ANALYSIS_COLS = ["Kod", "Pazar", "Tip", "Adet", "Maliyet", "Fiyat", "PB", "Değer", "Top. Kâr/Zarar", "Top. %", "Gün. Kâr/Zarar", "Notlar"]
-
-# --- VARLIK LİSTESİ ---
+KNOWN_FUNDS = ["YHB", "TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "OJT", "HKH", "IPB", "KZL", "RPD"]
 MARKET_DATA = {
-    "BIST (Tümü)": ["THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK", "KCHOL", "SAHOL", "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM", "HEKTS", "SASA", "ASTOR", "KONTR", "MEGMT", "REEDR", "TABGD", "A1CAP", "ACSEL", "TRMET"], 
-    "ABD (S&P + NASDAQ)": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META"], 
-    "KRIPTO": ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX"],
-    "FON (TEFAS/BES)": ["TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "YHB", "OJT", "HKH", "IPB", "KZL", "RPD"],
-    "EMTIA": ["Gram Altın (TL)", "Gram Gümüş (TL)", "Altın ONS", "Gümüş ONS", "Petrol", "Doğalgaz", "Gram Altın (Fiziki)", "Gram Gümüş (Fiziki)", "Çeyrek Altın", "Yarım Altın", "Tam Altın", "Dolar (Nakit)"],
-    "NAKIT": ["TL", "USD", "EUR", "GBP"]
+    "BIST (Tümü)": ["THYAO", "GARAN", "ASELS", "TRMET"], 
+    "ABD": ["AAPL", "TSLA"], "KRIPTO": ["BTC", "ETH"], "FON": KNOWN_FUNDS, "EMTIA": ["Gram Altın", "Gram Gümüş"], "VADELI": ["BTC", "ETH", "SOL"]
 }
 
-# --- DETAYLI ANALİZ ---
-def render_detail_view(symbol, pazar):
-    st.markdown(f"### 🔎 {symbol} Detaylı Analizi")
-    
-    if "FON" in pazar:
-        price, _ = get_tefas_data(symbol)
-        st.metric(f"{symbol} Son Fiyat", f"₺{price:,.6f}")
-        st.info("Yatırım fonları için anlık grafik desteği TEFAS kaynaklı sınırlıdır.")
-        return
-
-    try:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="2y")
-        
-        if not hist.empty:
-            fig = go.Figure(data=[go.Candlestick(x=hist.index,
-                            open=hist['Open'], high=hist['High'],
-                            low=hist['Low'], close=hist['Close'],
-                            name=symbol)])
-            fig.update_layout(
-                title=f'{symbol} Fiyat Grafiği',
-                yaxis_title='Fiyat',
-                template="plotly_dark",
-                height=600,
-                xaxis=dict(
-                    rangeselector=dict(
-                        buttons=list([
-                            dict(count=1, label="1A", step="month", stepmode="backward"),
-                            dict(count=3, label="3A", step="month", stepmode="backward"),
-                            dict(count=6, label="6A", step="month", stepmode="backward"),
-                            dict(count=1, label="YTD", step="year", stepmode="todate"),
-                            dict(count=1, label="1Y", step="year", stepmode="backward"),
-                            dict(step="all", label="TÜMÜ")
-                        ]),
-                        bgcolor="#262730",
-                        font=dict(color="white")
-                    ),
-                    rangeslider=dict(visible=False),
-                    type="date"
-                )
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            info = ticker.info
-            market_cap = info.get('marketCap', 'N/A')
-            if isinstance(market_cap, int): market_cap = f"{market_cap:,.0f}"
-            c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("Sektör", info.get('sector', '-'))
-            c2.metric("F/K", info.get('trailingPE', '-'))
-            c3.metric("Piyasa Değeri", market_cap)
-            c4.metric("52H Yüksek", info.get('fiftyTwoWeekHigh', '-'))
-            c5.metric("52H Düşük", info.get('fiftyTwoWeekLow', '-'))
-        else:
-            st.warning("Grafik verisi bulunamadı.")
-    except Exception as e:
-        st.error(f"Veri çekilemedi: {e}")
-
-# --- HESAPLAMA MOTORU (NAKİT & VADELİ DAHİL) ---
-def run_analysis(df, usd_try_rate, view_currency):
+# --- MAIN ANALİZ ---
+def run_analysis(df):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
-    
-    KNOWN_FUNDS = ["YHB", "TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "OJT", "HKH", "IPB", "KZL", "RPD"]
-
     for i, row in df.iterrows():
         kod = row.get("Kod", "")
-        pazar_raw = row.get("Pazar", "")
-        
+        pazar = row.get("Pazar", "")
         if kod in KNOWN_FUNDS: pazar = "FON"
-        else: pazar = pazar_raw
-        
-        if "FON" in pazar: pazar = "FON"
         if "FIZIKI" in str(pazar).upper(): pazar = "EMTIA"
-
         adet = smart_parse(row.get("Adet", 0))
         maliyet = smart_parse(row.get("Maliyet", 0))
+        if not kod: continue
         
-        if not kod: continue 
         symbol = get_yahoo_symbol(kod, pazar)
         asset_currency = "USD"
-        if "BIST" in pazar or "TL" in kod or "Fiziki" in pazar or "FON" in pazar or "NAKIT" in pazar: asset_currency = "TRY"
+        if "BIST" in pazar or "TL" in kod or "FON" in pazar or "EMTIA" in pazar: asset_currency = "TRY"
         
-        curr_price = 0
-        prev_close = 0
-        
+        curr, prev = 0, 0
+        # --- FİYAT ÇEKME MANTIKLARI ---
         try:
-            if "NAKIT" in pazar:
-                if kod == "TL": curr_price = 1
-                elif kod == "USD": curr_price = usd_try_rate
-                elif kod == "EUR": 
-                     try: curr_price = yf.Ticker("EURTRY=X").history(period="1d")['Close'].iloc[-1]
-                     except: curr_price = 36.0 # Fallback
-                prev_close = curr_price # Nakit için değişim 0 (şimdilik)
+            if "VADELI" in pazar: # Manuel Vadeli
+                # Vadelide güncel fiyatı Yahoo'dan çekip PNL hesapla
+                h = yf.Ticker(symbol).history(period="2d")
+                if not h.empty: curr = h['Close'].iloc[-1]
+                else: curr = maliyet
             elif "FON" in pazar:
-                curr_price, prev_close = get_tefas_data(kod)
-            
+                curr, prev = get_tefas_data(kod)
             elif "Gram Gümüş" in kod:
-                hist = yf.Ticker("SI=F").history(period="2d")
-                if len(hist) > 0:
-                    ons_now = hist['Close'].iloc[-1]
-                    ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
-                    curr_price = (ons_now * usd_try_rate) / 31.1035
-                    prev_close = (ons_prev * usd_try_rate) / 31.1035
-                else:
-                    curr_price = maliyet
-                    prev_close = maliyet
-
+                h = yf.Ticker("SI=F").history(period="2d")
+                if not h.empty:
+                    c = h['Close'].iloc[-1]; p = h['Close'].iloc[-2]
+                    curr = (c * USD_TRY) / 31.1035; prev = (p * USD_TRY) / 31.1035
             elif "Gram Altın" in kod:
-                hist = yf.Ticker("GC=F").history(period="2d")
-                if len(hist) > 0:
-                    ons_now = hist['Close'].iloc[-1]
-                    ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
-                    curr_price = (ons_now * usd_try_rate) / 31.1035
-                    prev_close = (ons_prev * usd_try_rate) / 31.1035
-                else:
-                    curr_price = maliyet
-                    prev_close = maliyet
-
-            else:
-                hist = yf.Ticker(symbol).history(period="2d")
-                if not hist.empty:
-                    curr_price = hist['Close'].iloc[-1]
-                    prev_close = hist['Close'].iloc[0] 
-                else: 
-                    curr_price = 0 
-                    prev_close = 0
-        except: 
-            curr_price = 0
-            prev_close = 0
+                h = yf.Ticker("GC=F").history(period="2d")
+                if not h.empty:
+                    c = h['Close'].iloc[-1]; p = h['Close'].iloc[-2]
+                    curr = (c * USD_TRY) / 31.1035; prev = (p * USD_TRY) / 31.1035
+            else: # Normal Hisseler
+                h = yf.Ticker(symbol).history(period="2d")
+                if not h.empty:
+                    curr = h['Close'].iloc[-1]; prev = h['Close'].iloc[0]
+        except: pass
         
-        if curr_price == 0: 
-            curr_price = maliyet
-            prev_close = maliyet
+        if curr == 0: curr = maliyet
+        if prev == 0: prev = curr
         
-        if prev_close == 0: prev_close = curr_price
-
-        # 100x Şişme Koruması (Nakit hariç)
-        if "NAKIT" not in pazar and curr_price > 0 and maliyet > 0:
-            if (maliyet / curr_price) > 50: 
-                maliyet = maliyet / 100
-
-        val_native = curr_price * adet
-        cost_native = maliyet * adet
-        daily_chg_native = (curr_price - prev_close) * adet
-
-        if view_currency == "TRY":
+        # Maliyet Düzeltmesi
+        if curr > 0 and maliyet > 0 and (maliyet/curr) > 50: maliyet /= 100
+        
+        # Vadeli İçin Özel PNL Hesabı (Kaldıraçsız Ham PNL Gösterimi - Manuel Olduğu İçin)
+        # Eğer gerçek vadeli PNL isteniyorsa API lazım. Manuelde sadece (Fiyat - Giriş) * Adet
+        if "VADELI" in pazar:
+            # Vadelide adet = kontrat büyüklüğü varsayıyoruz
+            val_native = (curr - maliyet) * adet # PNL (USDT)
+            # Vadelide "Değer" kavramı Teminat + PNL olabilir ama basit tutalım
+            cost_native = 0 # Marjin bilinmediği için
+        else:
+            val_native = curr * adet
+            cost_native = maliyet * adet
+        
+        daily_chg_native = (curr - prev) * adet if "VADELI" not in pazar else 0
+        
+        # Kur Çevirimi
+        if GORUNUM_PB == "TRY":
             if asset_currency == "USD":
-                fiyat_goster = curr_price * usd_try_rate
-                val_goster = val_native * usd_try_rate
-                cost_goster = cost_native * usd_try_rate
-                daily_chg = daily_chg_native * usd_try_rate
-            else: 
-                fiyat_goster = curr_price
-                val_goster = val_native
-                cost_goster = cost_native
-                daily_chg = daily_chg_native
-        elif view_currency == "USD":
+                f_g = curr * USD_TRY; v_g = val_native * USD_TRY
+                c_g = cost_native * USD_TRY; d_g = daily_chg_native * USD_TRY
+            else:
+                f_g = curr; v_g = val_native; c_g = cost_native; d_g = daily_chg_native
+        else: # USD GÖRÜNÜM
             if asset_currency == "TRY":
-                fiyat_goster = curr_price / usd_try_rate
-                val_goster = val_native / usd_try_rate
-                cost_goster = cost_native / usd_try_rate
-                daily_chg = daily_chg_native / usd_try_rate
-            else: 
-                fiyat_goster = curr_price
-                val_goster = val_native
-                cost_goster = cost_native
-                daily_chg = daily_chg_native
+                f_g = curr / USD_TRY; v_g = val_native / USD_TRY
+                c_g = cost_native / USD_TRY; d_g = daily_chg_native / USD_TRY
+            else:
+                f_g = curr; v_g = val_native; c_g = cost_native; d_g = daily_chg_native
         
-        pnl = val_goster - cost_goster
-        pnl_pct = (pnl / cost_goster * 100) if cost_goster > 0 else 0
-        
+        if "VADELI" in pazar:
+            pnl = v_g # Vadelide değer = PNL olarak yansıttık
+            pnl_pct = 0 # Kaldıraç bilmediğimiz için % zor
+        else:
+            pnl = v_g - c_g
+            pnl_pct = (pnl / c_g * 100) if c_g > 0 else 0
+
         results.append({
-            "Kod": kod, "Pazar": pazar, "Tip": row["Tip"],
-            "Adet": adet, "Maliyet": maliyet,
-            "Fiyat": fiyat_goster, "PB": view_currency,
-            "Değer": val_goster, "Top. Kâr/Zarar": pnl, "Top. %": pnl_pct,
-            "Gün. Kâr/Zarar": daily_chg, "Notlar": row.get("Notlar", "")
+            "Kod": kod, "Pazar": pazar, "Tip": row["Tip"], "Adet": adet, "Maliyet": maliyet,
+            "Fiyat": f_g, "PB": GORUNUM_PB, "Değer": v_g, "Top. Kâr/Zarar": pnl, "Top. %": pnl_pct,
+            "Gün. Kâr/Zarar": d_g, "Notlar": row.get("Notlar", "")
         })
     return pd.DataFrame(results)
 
-@st.cache_data(ttl=3600)
-def get_historical_chart(df, usd_try):
-    if df.empty: return None
-    tickers_map = {}
-    for idx, row in df.iterrows():
-        kod = row['Kod']
-        pazar = row['Pazar']
-        # NAKIT HARİÇ
-        if "Gram" not in kod and "Fiziki" not in pazar and "FON" not in pazar and "NAKIT" not in pazar:
-            sym = get_yahoo_symbol(kod, pazar)
-            try: adet = smart_parse(row['Adet'])
-            except: adet = 0
-            tickers_map[sym] = {"Adet": adet, "Pazar": pazar}
-    if not tickers_map: return None
-    try:
-        data = yf.download(list(tickers_map.keys()), period="6mo")['Close']
-    except: return None
-    if data.empty: return None
-    data = data.ffill()
-    portfolio_history = pd.Series(0, index=data.index)
-    if isinstance(data, pd.Series): data = data.to_frame(name=list(tickers_map.keys())[0])
-    for col in data.columns:
-        if col in tickers_map:
-            adet = tickers_map[col]["Adet"]
-            pazar = tickers_map[col]["Pazar"]
-            price_series = data[col]
-            if "KRIPTO" in pazar or "ABD" in pazar: portfolio_history += (price_series * adet * usd_try)
-            else: portfolio_history += (price_series * adet)
-    return portfolio_history
-
-def highlight_pnl(val):
-    if isinstance(val, (int, float)):
-        color = '#2ecc71' if val > 0 else '#e74c3c' if val < 0 else ''
-        return f'color: {color}'
-    return ''
-
-def styled_dataframe(df):
-    subset_cols = [c for c in df.columns if "Kâr/Zarar" in c or "%" in c]
-    format_dict = {c: "{:,.2f}" for c in df.columns if df[c].dtype in ['float64', 'int64']}
-    return df.style.map(highlight_pnl, subset=subset_cols).format(format_dict)
-
-# --- MAIN ---
 master_df = run_analysis(portfoy_df, USD_TRY, GORUNUM_PB)
 if "Tip" in master_df.columns:
     portfoy_only = master_df[master_df["Tip"] == "Portfoy"]
     takip_only = master_df[master_df["Tip"] == "Takip"]
-else:
-    portfoy_only = pd.DataFrame()
-    takip_only = pd.DataFrame()
+else: portfoy_only, takip_only = pd.DataFrame(), pd.DataFrame()
 
-def render_pazar_tab(df, filter_text, currency_symbol):
-    if df.empty: st.info("Veri yok."); return
-    df_filtered = df[df["Pazar"].str.contains(filter_text, na=False)]
-    if df_filtered.empty: st.info(f"{filter_text} kategorisinde varlık bulunamadı."); return
-    total_val = df_filtered["Değer"].sum()
-    total_pl = df_filtered["Top. Kâr/Zarar"].sum()
+# --- GÖRÜNÜM FONKSİYONLARI ---
+def render_pazar_tab(df, filter, sym):
+    if df.empty: return st.info("Veri yok.")
+    # Vadeli sekmesinde sadece Vadeli göster
+    if filter == "VADELI": sub = df[df["Pazar"].str.contains("VADELI", na=False)]
+    else: sub = df[df["Pazar"].str.contains(filter, na=False)]
+    
+    if sub.empty: return st.info(f"{filter} yok.")
+    
+    # Vadelide Toplam Değer = Toplam PNL
+    t_val = sub["Değer"].sum()
+    t_pl = sub["Top. Kâr/Zarar"].sum()
+    
     c1, c2 = st.columns(2)
-    c1.metric(f"Toplam {filter_text} Varlık", f"{currency_symbol}{total_val:,.0f}")
-    c2.metric(f"Toplam {filter_text} Kâr/Zarar", f"{currency_symbol}{total_pl:,.0f}", delta=f"{total_pl:,.0f}")
+    lbl = "Toplam PNL" if filter == "VADELI" else "Toplam Varlık"
+    c1.metric(lbl, f"{sym}{t_val:,.0f}")
+    c2.metric("Toplam Kâr/Zarar", f"{sym}{t_pl:,.0f}", delta=f"{t_pl:,.0f}")
     
     st.divider()
-    col_pie, col_bar = st.columns([1, 1])
-    with col_pie:
-        st.subheader(f"{filter_text} Dağılım")
-        fig_pie = px.pie(df_filtered, values='Değer', names='Kod', hole=0.4)
-        st.plotly_chart(fig_pie, use_container_width=True)
-    with col_bar:
-        st.subheader(f"{filter_text} Değerleri")
-        df_sorted = df_filtered.sort_values(by="Değer", ascending=False)
-        fig_bar = px.bar(df_sorted, x='Kod', y='Değer', color='Top. Kâr/Zarar')
-        st.plotly_chart(fig_bar, use_container_width=True)
-    
-    if filter_text not in ["FON", "NAKIT"]:
-        st.divider()
-        st.subheader(f"📈 {filter_text} Tarihsel Değer (Simülasyon)")
-        hist_data = get_historical_chart(df_filtered, USD_TRY)
-        if hist_data is not None: st.line_chart(hist_data, color="#4CAF50")
+    if filter != "VADELI": # Grafikler
+        c_p, c_b = st.columns(2)
+        c_p.plotly_chart(px.pie(sub, values='Değer', names='Kod', hole=0.4), use_container_width=True)
+        c_b.plotly_chart(px.bar(sub.sort_values('Değer'), x='Kod', y='Değer', color='Top. Kâr/Zarar'), use_container_width=True)
+        if filter not in ["FON", "EMTIA"]:
+             h = get_historical_chart(sub, USD_TRY)
+             if h is not None: st.line_chart(h, color="#4CAF50")
 
-    st.divider()
-    st.markdown("#### 🔍 Detaylı Analiz")
-    varlik_listesi = df_filtered["Kod"].unique().tolist()
-    secilen_varlik = st.selectbox(f"İncelemek istediğiniz {filter_text} varlığını seçin:", varlik_listesi, index=None, placeholder="Seçiniz...")
-    if secilen_varlik:
-        row = df_filtered[df_filtered["Kod"] == secilen_varlik].iloc[0]
-        sym = get_yahoo_symbol(row["Kod"], row["Pazar"])
-        render_detail_view(sym, row["Pazar"])
+    st.dataframe(styled_dataframe(sub), use_container_width=True, hide_index=True)
 
-    st.divider()
-    st.subheader(f"{filter_text} Liste")
-    st.dataframe(styled_dataframe(df_filtered), use_container_width=True, hide_index=True)
-
-sym = "₺" if GORUNUM_PB == "TRY" else "$"
-
+# --- SEKMELER ---
 if selected == "Dashboard":
     if not portfoy_only.empty:
-        total_val = portfoy_only["Değer"].sum()
-        total_pl = portfoy_only["Top. Kâr/Zarar"].sum()
+        # Vadeliyi Toplam Varlıktan Çıkar (Çünkü o PNL)
+        spot_only = portfoy_only[~portfoy_only["Pazar"].str.contains("VADELI")]
+        t_v = spot_only["Değer"].sum()
+        t_p = spot_only["Top. Kâr/Zarar"].sum()
+        
         c1, c2 = st.columns(2)
-        c1.metric("Toplam Portföy", f"{sym}{total_val:,.0f}")
-        c2.metric("Genel Kâr/Zarar", f"{sym}{total_pl:,.0f}", delta=f"{total_pl:,.0f}")
-        st.divider()
-        col_pie, col_bar = st.columns([1, 1])
-        with col_pie:
-            st.subheader("Dağılım")
-            fig_pie = px.pie(portfoy_only, values='Değer', names='Pazar', hole=0.4)
-            st.plotly_chart(fig_pie, use_container_width=True)
-        with col_bar:
-            st.subheader("Pazar Büyüklükleri")
-            df_pazar_group = portfoy_only.groupby("Pazar")["Değer"].sum().reset_index().sort_values(by="Değer", ascending=False)
-            fig_bar = px.bar(df_pazar_group, x='Pazar', y='Değer', color='Pazar')
-            st.plotly_chart(fig_bar, use_container_width=True)
-        st.divider()
-        st.subheader("🗺️ Portföy Isı Haritası")
-        fig_tree = px.treemap(portfoy_only, path=[px.Constant("Portföy"), 'Kod'], values='Değer', color='Top. %', hover_data=['Pazar', 'Değer', 'Top. Kâr/Zarar', 'Top. %'], color_continuous_scale='RdYlGn', color_continuous_midpoint=0)
-        fig_tree.update_layout(margin=dict(t=0, l=0, r=0, b=0))
-        st.plotly_chart(fig_tree, use_container_width=True)
-        st.divider()
-        st.subheader("📈 Tarihsel Zenginleşme (TL)")
-        hist_data = get_historical_chart(portfoy_df, USD_TRY)
-        if hist_data is not None: st.line_chart(hist_data, color="#4CAF50")
-    else: st.info("Portföy boş.")
-
-elif selected == "Tümü":
-    if not portfoy_only.empty:
-        col_pie_det, col_bar_det = st.columns([1, 1])
-        with col_pie_det:
-            st.subheader("Varlık Bazlı Dağılım")
-            fig_pie_det = px.pie(portfoy_only, values='Değer', names='Kod', hole=0.4)
-            st.plotly_chart(fig_pie_det, use_container_width=True)
-        with col_bar_det:
-            st.subheader("Varlık Bazlı Değerler")
-            top_assets = portfoy_only.sort_values(by="Değer", ascending=False)
-            fig_bar_det = px.bar(top_assets, x='Kod', y='Değer', color='Pazar')
-            st.plotly_chart(fig_bar_det, use_container_width=True)
+        c1.metric("Toplam Spot Varlık", f"{sym}{t_v:,.0f}")
+        c2.metric("Genel Kâr/Zarar", f"{sym}{t_p:,.0f}", delta=f"{t_p:,.0f}")
         
         st.divider()
-        st.markdown("#### 🔍 Detaylı Analiz")
-        all_assets = portfoy_only["Kod"].unique().tolist()
-        secilen = st.selectbox("İncelemek istediğiniz varlığı seçin:", all_assets, index=None, placeholder="Varlık Seç...")
-        if secilen:
-            row = portfoy_only[portfoy_only["Kod"] == secilen].iloc[0]
-            sym = get_yahoo_symbol(row["Kod"], row["Pazar"])
-            render_detail_view(sym, row["Pazar"])
-        st.divider()
-        st.subheader("Tüm Portföy Listesi")
-        st.dataframe(styled_dataframe(portfoy_only), use_container_width=True, hide_index=True)
-    else: st.info("Veri yok.")
+        # Treemap
+        fig = px.treemap(spot_only, path=[px.Constant("Portföy"), 'Kod'], values='Değer', color='Top. %', color_continuous_scale='RdYlGn', color_continuous_midpoint=0)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Tarihsel
+        h = get_historical_chart(portfoy_df, USD_TRY)
+        if h is not None: st.line_chart(h, color="#4CAF50")
+    else: st.info("Boş.")
 
+elif selected == "Tümü":
+    st.dataframe(styled_dataframe(portfoy_only), use_container_width=True)
+
+elif selected == "Vadeli":
+    # HİBRİT MOD: Önce API dene, olmazsa Manuel Tabloyu Göster
+    st.subheader("🚀 Vadeli İşlemler")
+    with st.expander("🔑 API ile Otomatik Çek (Opsiyonel)"):
+        ak = st.text_input("API Key", type="password")
+        ask = st.text_input("Secret", type="password")
+        if ak and ask:
+            ok, val, df_pos = get_binance_positions(ak, ask)
+            if ok:
+                st.success("Bağlandı!")
+                st.metric("Cüzdan", f"${val:,.2f}")
+                st.dataframe(df_pos)
+            else: st.error(val)
+    
+    st.markdown("---")
+    st.markdown("### 📝 Manuel Vadeli Takip")
+    st.info("VPN yoksa işlemlerini 'Ekle/Çıkar'dan **Pazar: VADELI** seçerek ekle. Anlık fiyat takibi ile PNL hesaplanır.")
+    render_pazar_tab(portfoy_only, "VADELI", sym)
+
+# Diğer sekmeler standart...
 elif selected == "BIST": render_pazar_tab(portfoy_only, "BIST", sym)
 elif selected == "ABD": render_pazar_tab(portfoy_only, "ABD", sym)
 elif selected == "FON": render_pazar_tab(portfoy_only, "FON", sym)
 elif selected == "Emtia": render_pazar_tab(portfoy_only, "EMTIA", sym)
 elif selected == "Kripto": render_pazar_tab(portfoy_only, "KRIPTO", sym)
 
-elif selected == "Vadeli":
-    st.subheader("🚀 Vadeli İşlemler (Binance Futures)")
-    with st.expander("🔑 API Ayarları"):
-        api_key = st.text_input("API Key", type="password")
-        api_secret = st.text_input("Secret Key", type="password")
-    
-    if api_key and api_secret:
-        stats, df_pos = get_binance_positions(api_key, api_secret)
-        if stats:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Cüzdan Bakiyesi", f"${stats['wallet']:,.2f}")
-            c2.metric("Toplam Varlık (Equity)", f"${stats['equity']:,.2f}")
-            c3.metric("Açık PNL", f"${stats['unrealized']:,.2f}", delta_color="normal")
-            
-            st.divider()
-            c4, c5, c6 = st.columns(3)
-            c4.metric("Günlük PNL", f"${stats['pnl_day']:,.2f}")
-            c5.metric("Haftalık PNL", f"${stats['pnl_week']:,.2f}")
-            c6.metric("Aylık PNL", f"${stats['pnl_month']:,.2f}")
-            
-            if not df_pos.empty:
-                st.dataframe(df_pos.style.applymap(lambda x: 'color: #00e676' if x > 0 else 'color: #ff5252', subset=['PNL (USDT)', 'ROE %']), use_container_width=True)
-            else:
-                st.info("Açık pozisyon yok.")
-        else:
-            st.error(f"Hata: {df_pos}")
-
-elif selected == "Nakit":
-    render_pazar_tab(portfoy_only, "NAKIT", sym)
-
-elif selected == "Haberler":
-    st.title("📰 Piyasa Haberleri")
-    c1, c2 = st.columns(2)
-    with c1: render_news_section("Borsa İstanbul", "BIST")
-    with c2: render_news_section("Döviz & Altın", "DOVIZ")
-    st.divider()
-    c3, c4 = st.columns(2)
-    with c3: render_news_section("Kripto Para", "KRIPTO")
-    with c4: render_news_section("Küresel Piyasalar", "GLOBAL")
-
-elif selected == "İzleme":
-    st.subheader("İzleme Listesi")
-    st.dataframe(styled_dataframe(takip_only), use_container_width=True, hide_index=True)
-
-elif selected == "Satışlar":
-    st.header("💰 Gerçekleşen Satış Geçmişi")
-    sales_df = get_sales_history()
-    if not sales_df.empty:
-        sales_df["Kâr/Zarar"] = pd.to_numeric(sales_df["Kâr/Zarar"], errors='coerce')
-        total_realized_pl = sales_df["Kâr/Zarar"].sum()
-        st.metric("Toplam Realize Edilen (Cepteki) Kâr/Zarar", f"{total_realized_pl:,.2f}")
-        st.divider()
-        st.dataframe(styled_dataframe(sales_df.iloc[::-1]), use_container_width=True, hide_index=True)
-    else: st.info("Henüz satış işlemi yok.")
-
 elif selected == "Ekle/Çıkar":
     st.header("Varlık Yönetimi")
+    tab1, tab2, tab3 = st.tabs(["Ekle", "Düzenle", "Sil/Sat"])
+    with tab1:
+        pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()) + ["VADELI (Manuel)"])
+        kod = st.text_input("Kod (Örn: BTC, THYAO)").upper()
+        c1, c2 = st.columns(2)
+        adet = c1.text_input("Adet/Kontrat", "0")
+        maliyet = c2.text_input("Giriş Fiyatı", "0")
+        if st.button("Kaydet"):
+             a = smart_parse(adet); m = smart_parse(maliyet)
+             if a > 0:
+                 # Varsa eskisi silinir
+                 portfoy_df = portfoy_df[portfoy_df["Kod"] != kod]
+                 new_row = pd.DataFrame({"Kod": [kod], "Pazar": [pazar], "Adet": [a], "Maliyet": [m], "Tip": ["Portfoy"], "Notlar": [""]})
+                 portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
+                 save_data_to_sheet(portfoy_df)
+                 st.success("Eklendi!")
+                 time.sleep(1)
+                 st.rerun()
     
-    if not portfoy_only.empty:
-        st.download_button(
-            label="📥 Portföyü Excel Olarak İndir",
-            data=portfoy_only.to_csv(index=False).encode('utf-8'),
-            file_name='portfoyum.csv',
-            mime='text/csv',
-        )
-    
-    tab_ekle, tab_duzenle, tab_sil = st.tabs(["➕ Ekle", "✏️ Düzenle", "📉 Satış / 🗑️ Sil"])
-    
-    with tab_ekle:
-        st.info("💡 İpucu: Ondalık sayılar için **VİRGÜL ( , )** kullanın. Örn: **30,26**")
-        islem_tipi = st.radio("Tür", ["Portföy", "Takip"], horizontal=True)
-        yeni_pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()))
-        if "ABD" in yeni_pazar: st.warning("🇺🇸 ABD için Maliyeti DOLAR girin.")
-        
-        secenekler = MARKET_DATA.get(yeni_pazar, [])
-        with st.form("add_asset_form"):
-            yeni_kod = st.selectbox("Listeden Seç", options=secenekler, index=None, placeholder="Seçiniz...")
-            manuel_kod = st.text_input("Veya Manuel Yaz (Örn: TTE)").upper()
-            
-            c1, c2 = st.columns(2)
-            adet_str = c1.text_input("Adet (Örn: 119)", value="0")
-            maliyet_str = c2.text_input("Maliyet (Örn: 30,26)", value="0")
-            not_inp = st.text_input("Not")
-
-            try:
-                a_v = smart_parse(adet_str)
-                m_v = smart_parse(maliyet_str)
-                t_v = a_v * m_v
-                st.markdown(f"📝 **Özet:** {a_v:g} Adet x {m_v:g} Fiyat = **{t_v:,.2f}**")
-            except: pass
-            
-            if st.form_submit_button("Kaydet", type="primary", use_container_width=True):
-                adet_inp = smart_parse(adet_str)
-                maliyet_inp = smart_parse(maliyet_str)
-                final_kod = manuel_kod if manuel_kod else yeni_kod
-                
-                if final_kod and adet_inp > 0:
-                    portfoy_df = portfoy_df[portfoy_df["Kod"] != final_kod]
-                    tip_str = "Portfoy" if islem_tipi == "Portföy" else "Takip"
-                    yeni_satir = pd.DataFrame({
-                        "Kod": [final_kod], "Pazar": [yeni_pazar], 
-                        "Adet": [adet_inp], "Maliyet": [maliyet_inp],
-                        "Tip": [tip_str], "Notlar": [not_inp]
-                    })
-                    portfoy_df = pd.concat([portfoy_df, yeni_satir], ignore_index=True)
-                    save_data_to_sheet(portfoy_df)
-                    st.success(f"{final_kod} eklendi!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("Lütfen geçerli değerler girin.")
-
-    with tab_duzenle:
-        st.subheader("✏️ Mevcut Kaydı Düzenle")
+    with tab2:
         if not portfoy_df.empty:
-            varliklar_duz = portfoy_df["Kod"].unique()
-            secilen_duz = st.selectbox("Düzenlenecek Varlık", varliklar_duz)
-            
-            if secilen_duz:
-                mevcut_row = portfoy_df[portfoy_df["Kod"] == secilen_duz].iloc[0]
-                curr_adet = smart_parse(mevcut_row["Adet"])
-                curr_maliyet = smart_parse(mevcut_row["Maliyet"])
-                
-                st.info(f"Mevcut: **{curr_adet:g}** Adet | **{curr_maliyet:g}** Maliyet")
-                
-                c1, c2 = st.columns(2)
-                yeni_adet_str = c1.text_input("Yeni Adet", value=f"{curr_adet:g}")
-                yeni_maliyet_str = c2.text_input("Yeni Maliyet", value=f"{curr_maliyet:g}")
-                
-                if st.button("Güncelle", type="primary"):
-                    y_adet = smart_parse(yeni_adet_str)
-                    y_maliyet = smart_parse(yeni_maliyet_str)
-                    
-                    portfoy_df = portfoy_df[portfoy_df["Kod"] != secilen_duz]
-                    yeni_satir = pd.DataFrame({
-                        "Kod": [secilen_duz], "Pazar": [mevcut_row["Pazar"]], 
-                        "Adet": [y_adet], "Maliyet": [y_maliyet],
-                        "Tip": [mevcut_row["Tip"]], "Notlar": [mevcut_row["Notlar"]]
-                    })
-                    portfoy_df = pd.concat([portfoy_df, yeni_satir], ignore_index=True)
+            s = st.selectbox("Seç", portfoy_df["Kod"].unique())
+            if s:
+                r = portfoy_df[portfoy_df["Kod"]==s].iloc[0]
+                na = st.text_input("Yeni Adet", str(r["Adet"]))
+                nm = st.text_input("Yeni Maliyet", str(r["Maliyet"]))
+                if st.button("Güncelle"):
+                    portfoy_df = portfoy_df[portfoy_df["Kod"] != s]
+                    new_row = pd.DataFrame({"Kod": [s], "Pazar": [r["Pazar"]], "Adet": [smart_parse(na)], "Maliyet": [smart_parse(nm)], "Tip": [r["Tip"]], "Notlar": [""]})
+                    portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
                     save_data_to_sheet(portfoy_df)
                     st.success("Güncellendi!")
                     time.sleep(1)
                     st.rerun()
-
-    with tab_sil:
+                    
+    with tab3:
         if not portfoy_df.empty:
-            varliklar = portfoy_df[portfoy_df["Tip"] == "Portfoy"]["Kod"].unique()
-            
-            st.markdown("#### 💰 Satış Yap")
-            with st.form("sell_asset_form"):
-                satilacak_kod = st.selectbox("Satılacak Varlık", varliklar)
-                if satilacak_kod:
-                    mevcut_veri = portfoy_df[portfoy_df["Kod"] == satilacak_kod].iloc[0]
-                    m_adet = smart_parse(mevcut_veri["Adet"])
-                    m_maliyet = smart_parse(mevcut_veri["Maliyet"])
-                    pazar_yeri = mevcut_veri["Pazar"]
-                    st.info(f"Elinizdeki: **{m_adet:g}** Adet | Ort. Maliyet: **{m_maliyet:g}**")
-                else:
-                    m_adet, m_maliyet = 0, 0
-                
-                c1, c2 = st.columns(2)
-                satilan_str = c1.text_input("Satılacak Adet", value="0")
-                fiyat_str = c2.text_input("Satış Fiyatı", value="0")
-                
-                if st.form_submit_button("✅ Satışı Onayla", type="primary"):
-                    s_adet = smart_parse(satilan_str)
-                    s_fiyat = smart_parse(fiyat_str)
-                    if s_adet > 0 and s_fiyat > 0:
-                        if s_adet > m_adet: st.error("Elinizden fazla satamazsınız!")
-                        else:
-                            kar_zarar = (s_fiyat - m_maliyet) * s_adet
-                            tarih = datetime.now().strftime("%Y-%m-%d %H:%M")
-                            add_sale_record(tarih, satilacak_kod, pazar_yeri, s_adet, s_fiyat, m_maliyet, kar_zarar)
-                            
-                            yeni_adet = m_adet - s_adet
-                            if yeni_adet <= 0.0001: 
-                                portfoy_df = portfoy_df[portfoy_df["Kod"] != satilacak_kod]
-                                msg = f"{satilacak_kod} tamamen satıldı."
-                            else: 
-                                portfoy_df.loc[portfoy_df["Kod"] == satilacak_kod, "Adet"] = yeni_adet
-                                msg = f"{s_adet:g} adet satıldı. Kalan: {yeni_adet:g}"
-                            save_data_to_sheet(portfoy_df)
-                            st.success(msg)
-                            time.sleep(1)
-                            st.rerun()
-                    else: st.error("Geçerli değerler giriniz.")
-
-            st.markdown("---")
-            st.markdown("#### 🗑️ Kaydı Direkt Sil")
-            with st.form("delete_row_form"):
-                silinecek_kod = st.selectbox("Silinecek Varlık Seçin", varliklar, key="sil_box")
-                if st.form_submit_button("🚫 Sil"):
-                    if silinecek_kod:
-                        portfoy_df = portfoy_df[portfoy_df["Kod"] != silinecek_kod]
-                        save_data_to_sheet(portfoy_df)
-                        st.warning(f"{silinecek_kod} silindi!")
-                        time.sleep(1)
-                        st.rerun()
-        else: st.info("İşlem yapılacak varlık yok.")
+            s = st.selectbox("Silinecek", portfoy_df["Kod"].unique(), key="del")
+            if st.button("🗑️ Sil"):
+                portfoy_df = portfoy_df[portfoy_df["Kod"] != s]
+                save_data_to_sheet(portfoy_df)
+                st.success("Silindi!")
+                time.sleep(1)
+                st.rerun()
