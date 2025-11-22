@@ -810,7 +810,7 @@ c2.metric(
 )
 
     
-    st.divider()
+st.divider()
     col_pie, col_bar = st.columns([1, 1])
     with col_pie:
         st.subheader(f"{filter_text} Dağılım")
@@ -1164,4 +1164,5 @@ elif selected == "Ekle/Çıkar":
                         st.rerun()
         else:
             st.info("İşlem yapılacak varlık yok.")
+
 
