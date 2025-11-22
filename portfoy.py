@@ -80,7 +80,7 @@ st.markdown("""
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
     kod = str(kod).upper()
-    if kod == "TRMET": return "KOZAA.IS" # TRMET FIX
+    if kod == "TRMET": return "KOZAA.IS"
     
     if pazar == "NAKIT": return kod 
     if pazar == "FON": return kod 
@@ -186,13 +186,19 @@ def get_crypto_globals():
 @st.cache_data(ttl=300)
 def get_financial_news(topic="finance"):
     urls = {"BIST": "https://news.google.com/rss/search?q=Borsa+Istanbul+Hisseler&hl=tr&gl=TR&ceid=TR:tr", "KRIPTO": "https://news.google.com/rss/search?q=Kripto+Para+Bitcoin&hl=tr&gl=TR&ceid=TR:tr", "GLOBAL": "https://news.google.com/rss/search?q=ABD+Borsaları+Fed&hl=tr&gl=TR&ceid=TR:tr", "DOVIZ": "https://news.google.com/rss/search?q=Dolar+Altın+Piyasa&hl=tr&gl=TR&ceid=TR:tr"}
-    feed = feedparser.parse(urls.get(topic, urls["BIST"]))
-    return [{"title": e.title, "link": e.link, "date": e.published} for e in feed.entries[:10]]
+    try:
+        feed = feedparser.parse(urls.get(topic, urls["BIST"]))
+        return [{"title": e.title, "link": e.link, "date": e.published} for e in feed.entries[:10]]
+    except: return []
 
 def render_news_section(name, key):
     st.subheader(f"📰 {name}")
-    for n in get_financial_news(key):
-        st.markdown(f"""<div class="news-card"><a href="{n['link']}" target="_blank" class="news-title">{n['title']}</a><div class="news-meta">🕒 {n['date']}</div></div>""", unsafe_allow_html=True)
+    news = get_financial_news(key)
+    if news:
+        for n in news:
+            st.markdown(f"""<div class="news-card"><a href="{n['link']}" target="_blank" class="news-title">{n['title']}</a><div class="news-meta">🕒 {n['date']}</div></div>""", unsafe_allow_html=True)
+    else:
+        st.info("Haber akışı yüklenemedi.")
 
 # --- DATA ---
 SHEET_NAME = "PortfoyData" 
@@ -308,7 +314,7 @@ def get_usd_try():
     except: return 34.0
 
 USD_TRY = get_usd_try()
-sym = "₺" if GORUNUM_PB == "TRY" else "$"
+sym = "₺" if GORUNUM_PB == "TRY" else "$" # FIX
 
 mh, ph = get_tickers_data(portfoy_df, USD_TRY)
 st.markdown(f"""<div class="ticker-container market-ticker">{mh}</div><div class="ticker-container portfolio-ticker">{ph}</div>""", unsafe_allow_html=True)
@@ -403,7 +409,6 @@ def run_analysis(df, usd_try_rate, view_currency):
         
         if curr == 0: curr = maliyet
         if prev == 0: prev = curr
-        
         if curr > 0 and maliyet > 0 and (maliyet/curr) > 50: maliyet /= 100
         
         if "VADELI" in pazar:
@@ -464,28 +469,15 @@ def render_pazar_tab(df, filter, sym):
     c2.metric("Toplam Kâr/Zarar", f"{sym}{t_pl:,.0f}", delta=f"{t_pl:,.0f}")
     
     st.divider()
-    
-    # BURASI DÜZELTİLDİ: Grafikler geri eklendi
     if filter != "VADELI": 
         c_p, c_b = st.columns(2)
         c_p.plotly_chart(px.pie(sub, values='Değer', names='Kod', hole=0.4), use_container_width=True)
         c_b.plotly_chart(px.bar(sub.sort_values('Değer'), x='Kod', y='Değer', color='Top. Kâr/Zarar'), use_container_width=True)
-        
         if filter not in ["FON", "EMTIA", "NAKIT"]:
              try:
                  h = get_historical_chart(sub, USD_TRY)
                  if h is not None: st.line_chart(h, color="#4CAF50")
              except: st.warning("Tarihsel grafik yüklenemedi.")
-
-    # DETAYLI ANALİZ SEÇİMİ
-    st.divider()
-    st.markdown("#### 🔍 Detaylı Analiz")
-    varlik_listesi = sub["Kod"].unique().tolist()
-    secilen_varlik = st.selectbox(f"İncelemek istediğiniz {filter} varlığını seçin:", varlik_listesi, index=None, placeholder="Seçiniz...")
-    if secilen_varlik:
-        row = sub[sub["Kod"] == secilen_varlik].iloc[0]
-        sym_yahoo = get_yahoo_symbol(row["Kod"], row["Pazar"])
-        render_detail_view(sym_yahoo, row["Pazar"])
 
     st.dataframe(styled_dataframe(sub), use_container_width=True, hide_index=True)
 
