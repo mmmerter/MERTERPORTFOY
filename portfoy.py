@@ -78,7 +78,6 @@ st.markdown("""
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
     kod = str(kod).upper()
-    
     # TRMET Düzeltmesi
     if kod == "TRMET": return "KOZAA.IS"
     
@@ -193,6 +192,12 @@ def get_data_from_sheet():
         expected_cols = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
         for col in expected_cols:
             if col not in df.columns: df[col] = "" 
+        
+        # --- FON İSİM DÜZELTME ---
+        # "FON (TEFAS/BES)" veya "FON" geçenleri tek tip "FON" yap
+        if not df.empty:
+            df["Pazar"] = df["Pazar"].apply(lambda x: "FON" if "FON" in str(x) else x)
+            
         return df
     except:
         return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
@@ -249,7 +254,6 @@ def get_tickers_data(df_portfolio, usd_try):
         for _, row in assets.iterrows():
             kod = row['Kod']
             pazar = row['Pazar']
-            # FONLARI ve FİZİKİLERİ ŞERİDE ALMIYORUZ
             if "Fiziki" not in pazar and "Gram" not in kod and "FON" not in pazar:
                 sym = get_yahoo_symbol(kod, pazar)
                 portfolio_symbols[kod] = sym
@@ -348,11 +352,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- NAVİGASYON MENÜSÜ (FIZIKI KALDIRILDI) ---
+# --- NAVİGASYON MENÜSÜ ---
 selected = option_menu(
     menu_title=None, 
-    options=["Dashboard", "Tümü", "BIST", "ABD", "FON", "Emtia", "Kripto", "Haberler", "İzleme", "Satışlar", "Ekle/Çıkar"], 
-    icons=["speedometer2", "list-task", "graph-up-arrow", "currency-dollar", "piggy-bank", "fuel-pump", "currency-bitcoin", "newspaper", "eye", "receipt", "gear"], 
+    options=["Dashboard", "Tümü", "BIST", "ABD", "FON", "Emtia", "Fiziki", "Kripto", "Haberler", "İzleme", "Satışlar", "Ekle/Çıkar"], 
+    icons=["speedometer2", "list-task", "graph-up-arrow", "currency-dollar", "piggy-bank", "fuel-pump", "house", "currency-bitcoin", "newspaper", "eye", "receipt", "gear"], 
     menu_icon="cast", 
     default_index=0, 
     orientation="horizontal",
@@ -373,13 +377,14 @@ selected = option_menu(
 
 ANALYSIS_COLS = ["Kod", "Pazar", "Tip", "Adet", "Maliyet", "Fiyat", "PB", "Değer", "Top. Kâr/Zarar", "Top. %", "Gün. Kâr/Zarar", "Notlar"]
 
-# --- VARLIK LİSTESİ (FIZIKI KALDIRILDI) ---
+# --- VARLIK LİSTESİ ---
 MARKET_DATA = {
     "BIST (Tümü)": ["THYAO", "GARAN", "ASELS", "EREGL", "SISE", "BIMAS", "AKBNK", "YKBNK", "KCHOL", "SAHOL", "TUPRS", "FROTO", "TOASO", "PGSUS", "TCELL", "PETKM", "HEKTS", "SASA", "ASTOR", "KONTR", "MEGMT", "REEDR", "TABGD", "A1CAP", "ACSEL", "TRMET"], 
     "ABD (S&P + NASDAQ)": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META"], 
     "KRIPTO": ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX"],
     "FON (TEFAS/BES)": ["TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "YHB", "OJT", "HKH", "IPB", "KZL", "RPD"],
-    "EMTIA": ["Gram Altın (TL)", "Gram Gümüş (TL)", "Altın ONS", "Gümüş ONS", "Petrol", "Doğalgaz"]
+    "EMTIA": ["Gram Altın (TL)", "Gram Gümüş (TL)", "Altın ONS", "Gümüş ONS", "Petrol", "Doğalgaz"],
+    "FIZIKI VARLIKLAR": ["Gram Altın (Fiziki)", "Gram Gümüş (Fiziki)", "Çeyrek Altın", "Yarım Altın", "Tam Altın", "Dolar (Nakit)"]
 }
 
 # --- DETAYLI ANALİZ ---
@@ -439,7 +444,7 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU (FIZIKI KALDIRILDI) ---
+# --- HESAPLAMA MOTORU (PAZAR ODAKLI + FON FİX) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
@@ -450,6 +455,7 @@ def run_analysis(df, usd_try_rate, view_currency):
         kod = row.get("Kod", "")
         pazar_raw = row.get("Pazar", "")
         
+        # FON TANIMA KORUMASI
         if kod in KNOWN_FUNDS:
             pazar = "FON"
         else:
@@ -461,8 +467,7 @@ def run_analysis(df, usd_try_rate, view_currency):
         if not kod: continue 
         symbol = get_yahoo_symbol(kod, pazar)
         asset_currency = "USD"
-        # FON veya BIST ise para birimi TRY
-        if "BIST" in pazar or "TL" in kod or "FON" in pazar: asset_currency = "TRY"
+        if "BIST" in pazar or "TL" in kod or "Fiziki" in pazar or "FON" in pazar: asset_currency = "TRY"
         
         curr_price = 0
         prev_close = 0
@@ -471,7 +476,6 @@ def run_analysis(df, usd_try_rate, view_currency):
             if "FON" in pazar:
                 curr_price, prev_close = get_tefas_data(kod)
             
-            # --- GRAM GÜMÜŞ (TEK YER BURASI) ---
             elif "Gram Gümüş" in kod:
                 hist = yf.Ticker("SI=F").history(period="2d")
                 if len(hist) > 0:
@@ -483,7 +487,6 @@ def run_analysis(df, usd_try_rate, view_currency):
                     curr_price = maliyet
                     prev_close = maliyet
 
-            # --- GRAM ALTIN (TEK YER BURASI) ---
             elif "Gram Altın" in kod:
                 hist = yf.Ticker("GC=F").history(period="2d")
                 if len(hist) > 0:
@@ -495,6 +498,9 @@ def run_analysis(df, usd_try_rate, view_currency):
                     curr_price = maliyet
                     prev_close = maliyet
 
+            elif "Fiziki" in pazar: 
+                curr_price = maliyet
+                prev_close = maliyet
             else:
                 hist = yf.Ticker(symbol).history(period="2d")
                 if not hist.empty:
@@ -563,8 +569,7 @@ def get_historical_chart(df, usd_try):
     for idx, row in df.iterrows():
         kod = row['Kod']
         pazar = row['Pazar']
-        # FON hariç
-        if "Gram" not in kod and "FON" not in pazar:
+        if "Gram" not in kod and "Fiziki" not in pazar and "FON" not in pazar:
             sym = get_yahoo_symbol(kod, pazar)
             try: adet = smart_parse(row['Adet'])
             except: adet = 0
@@ -628,7 +633,7 @@ def render_pazar_tab(df, filter_text, currency_symbol):
         fig_bar = px.bar(df_sorted, x='Kod', y='Değer', color='Top. Kâr/Zarar')
         st.plotly_chart(fig_bar, use_container_width=True)
     
-    if filter_text not in ["FON"]:
+    if filter_text not in ["FON", "FIZIKI"]:
         st.divider()
         st.subheader(f"📈 {filter_text} Tarihsel Değer (Simülasyon)")
         hist_data = get_historical_chart(df_filtered, USD_TRY)
@@ -691,6 +696,7 @@ elif selected == "BIST": render_pazar_tab(portfoy_only, "BIST", sym)
 elif selected == "ABD": render_pazar_tab(portfoy_only, "ABD", sym)
 elif selected == "FON": render_pazar_tab(portfoy_only, "FON", sym)
 elif selected == "Emtia": render_pazar_tab(portfoy_only, "EMTIA", sym)
+elif selected == "Fiziki": render_pazar_tab(portfoy_only, "FIZIKI", sym)
 elif selected == "Kripto": render_pazar_tab(portfoy_only, "KRIPTO", sym)
 
 elif selected == "Haberler":
