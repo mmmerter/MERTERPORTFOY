@@ -79,7 +79,7 @@ st.markdown("""
 def get_yahoo_symbol(kod, pazar):
     kod = str(kod).upper()
     
-    # --- ÖZEL HİSSE DÜZELTMELERİ (TRMET -> KOZAA) ---
+    # TRMET Düzeltmesi (Yahoo'da yoksa KOZAA verisi çek)
     if kod == "TRMET": return "KOZAA.IS"
     
     if "FON" in pazar: return kod 
@@ -111,7 +111,19 @@ def smart_parse(text_val):
 @st.cache_data(ttl=14400) 
 def get_tefas_data(fund_code):
     try:
-        # Önce kütüphaneyi dene
+        # Önce Web Scraping (Daha hızlı güncellenir)
+        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200:
+            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
+            if match:
+                price = float(match.group(1).replace(",", "."))
+                return price, price
+    except: pass
+
+    try:
+        # Yedek Kütüphane
         crawler = Crawler()
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
@@ -121,18 +133,6 @@ def get_tefas_data(fund_code):
             current_price = float(result["Price"].iloc[-1])
             prev_price = float(result["Price"].iloc[-2]) if len(result) > 1 else current_price
             return current_price, prev_price
-    except: pass
-    
-    # Kütüphane çalışmazsa Web Scraping (Yedek)
-    try:
-        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(url, headers=headers, timeout=5)
-        if r.status_code == 200:
-            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
-            if match:
-                price = float(match.group(1).replace(",", "."))
-                return price, price
     except: pass
     return 0, 0
 
@@ -249,7 +249,7 @@ def get_tickers_data(df_portfolio, usd_try):
         for _, row in assets.iterrows():
             kod = row['Kod']
             pazar = row['Pazar']
-            # FON ve FİZİKİ hariç
+            # Gümüş ve Fonları şeritte bozmasın diye ayıklıyoruz
             if "Fiziki" not in pazar and "Gram" not in kod and "FON" not in pazar:
                 sym = get_yahoo_symbol(kod, pazar)
                 portfolio_symbols[kod] = sym
@@ -440,7 +440,7 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU (GÜMÜŞ VE TRMET FİX) ---
+# --- HESAPLAMA MOTORU (GÜMÜŞ VE TRMET DÜZELTMELİ) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
@@ -451,6 +451,7 @@ def run_analysis(df, usd_try_rate, view_currency):
         kod = row.get("Kod", "")
         pazar_raw = row.get("Pazar", "")
         
+        # FON TANIMA KORUMASI
         if kod in KNOWN_FUNDS:
             pazar = "FON"
         else:
@@ -471,28 +472,28 @@ def run_analysis(df, usd_try_rate, view_currency):
             if "FON" in pazar:
                 curr_price, prev_close = get_tefas_data(kod)
             
-            # --- GRAM ALTIN ---
-            elif "Gram Altın" in kod:
-                hist = yf.Ticker("GC=F").history(period="2d")
-                if len(hist) > 1:
+            # --- GRAM GÜMÜŞ DÜZELTMESİ (İLK KONTROL) ---
+            elif "Gram Gümüş" in kod:
+                hist = yf.Ticker("SI=F").history(period="2d")
+                if len(hist) > 0:
                     ons_now = hist['Close'].iloc[-1]
-                    ons_prev = hist['Close'].iloc[-2]
+                    ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
+                    # Gümüş ONS * Dolar / 31.1035
                     curr_price = (ons_now * usd_try_rate) / 31.1035
                     prev_close = (ons_prev * usd_try_rate) / 31.1035
-                else: 
+                else:
                     curr_price = maliyet
                     prev_close = maliyet
 
-            # --- GRAM GÜMÜŞ (DÜZELTİLDİ) ---
-            elif "Gram Gümüş" in kod:
-                hist = yf.Ticker("SI=F").history(period="2d")
-                if len(hist) > 1:
+            # --- GRAM ALTIN ---
+            elif "Gram Altın" in kod:
+                hist = yf.Ticker("GC=F").history(period="2d")
+                if len(hist) > 0:
                     ons_now = hist['Close'].iloc[-1]
-                    ons_prev = hist['Close'].iloc[-2]
-                    # Gümüş için de aynı gram formülü geçerli: (Ons * Dolar) / 31.1035
+                    ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
                     curr_price = (ons_now * usd_try_rate) / 31.1035
                     prev_close = (ons_prev * usd_try_rate) / 31.1035
-                else: 
+                else:
                     curr_price = maliyet
                     prev_close = maliyet
 
@@ -500,6 +501,7 @@ def run_analysis(df, usd_try_rate, view_currency):
                 curr_price = maliyet
                 prev_close = maliyet
             else:
+                # TRMET vb. için
                 hist = yf.Ticker(symbol).history(period="2d")
                 if not hist.empty:
                     curr_price = hist['Close'].iloc[-1]
@@ -511,14 +513,14 @@ def run_analysis(df, usd_try_rate, view_currency):
             curr_price = 0
             prev_close = 0
         
-        # FİYAT BULUNAMAZSA MALİYET AL
+        # Fiyat Yoksa Maliyeti Kullan (Zarar Yazmasın)
         if curr_price == 0: 
             curr_price = maliyet
             prev_close = maliyet
         
         if prev_close == 0: prev_close = curr_price
 
-        # 100 KAT KORUMASI
+        # 100 Kat Koruması
         if curr_price > 0 and maliyet > 0:
             if (maliyet / curr_price) > 50: 
                 maliyet = maliyet / 100
@@ -569,8 +571,8 @@ def get_historical_chart(df, usd_try):
     for idx, row in df.iterrows():
         kod = row['Kod']
         pazar = row['Pazar']
-        # FON ve FİZİKİ hariç
-        if "Fiziki" not in pazar and "FON" not in pazar:
+        # GRAM VE FİZİKİ HARİÇ (Özel hesap gerekir, basitleştirmek için atlıyoruz)
+        if "Gram" not in kod and "Fiziki" not in pazar and "FON" not in pazar:
             sym = get_yahoo_symbol(kod, pazar)
             try: adet = smart_parse(row['Adet'])
             except: adet = 0
@@ -681,16 +683,13 @@ if selected == "Dashboard":
 
 elif selected == "Tümü":
     if not portfoy_only.empty:
-        col_pie_det, col_bar_det = st.columns([1, 1])
-        with col_pie_det:
-            st.subheader("Varlık Bazlı Dağılım")
-            fig_pie_det = px.pie(portfoy_only, values='Değer', names='Kod', hole=0.4)
-            st.plotly_chart(fig_pie_det, use_container_width=True)
-        with col_bar_det:
-            st.subheader("Varlık Bazlı Değerler")
-            top_assets = portfoy_only.sort_values(by="Değer", ascending=False)
-            fig_bar_det = px.bar(top_assets, x='Kod', y='Değer', color='Pazar')
-            st.plotly_chart(fig_bar_det, use_container_width=True)
+        st.markdown("#### 🔍 Detaylı Analiz")
+        all_assets = portfoy_only["Kod"].unique().tolist()
+        secilen = st.selectbox("İncelemek istediğiniz varlığı seçin:", all_assets, index=None, placeholder="Varlık Seç...")
+        if secilen:
+            row = portfoy_only[portfoy_only["Kod"] == secilen].iloc[0]
+            sym = get_yahoo_symbol(row["Kod"], row["Pazar"])
+            render_detail_view(sym, row["Pazar"])
         st.divider()
         st.subheader("Tüm Portföy Listesi")
         st.dataframe(styled_dataframe(portfoy_only), use_container_width=True, hide_index=True)
@@ -741,6 +740,7 @@ elif selected == "Ekle/Çıkar":
     
     tab_ekle, tab_duzenle, tab_sil = st.tabs(["➕ Ekle", "✏️ Düzenle", "📉 Satış / 🗑️ Sil"])
     
+    # --- 1. EKLEME ---
     with tab_ekle:
         st.info("💡 İpucu: Ondalık sayılar için **VİRGÜL ( , )** kullanın. Örn: **30,26**")
         islem_tipi = st.radio("Tür", ["Portföy", "Takip"], horizontal=True)
@@ -753,8 +753,8 @@ elif selected == "Ekle/Çıkar":
             manuel_kod = st.text_input("Veya Manuel Yaz (Örn: TTE)").upper()
             
             c1, c2 = st.columns(2)
-            adet_str = c1.text_input("Adet", value="0")
-            maliyet_str = c2.text_input("Maliyet", value="0")
+            adet_str = c1.text_input("Adet (Örn: 119)", value="0")
+            maliyet_str = c2.text_input("Maliyet (Örn: 30,26)", value="0")
             not_inp = st.text_input("Not")
 
             try:
@@ -785,6 +785,7 @@ elif selected == "Ekle/Çıkar":
                 else:
                     st.error("Lütfen geçerli değerler girin.")
 
+    # --- 2. DÜZENLEME ---
     with tab_duzenle:
         st.subheader("✏️ Mevcut Kaydı Düzenle")
         if not portfoy_df.empty:
@@ -818,6 +819,7 @@ elif selected == "Ekle/Çıkar":
                     time.sleep(1)
                     st.rerun()
 
+    # --- 3. SATIŞ / SİLME ---
     with tab_sil:
         if not portfoy_df.empty:
             varliklar = portfoy_df[portfoy_df["Tip"] == "Portfoy"]["Kod"].unique()
