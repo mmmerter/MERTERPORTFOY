@@ -384,9 +384,17 @@ if selected == "Dashboard":
         t_v = spot_only["Değer"].sum()
         t_p = spot_only["Top. Kâr/Zarar"].sum()
 
+        # Dashboard için yüzde hesapla
+        total_cost = (spot_only["Değer"] - spot_only["Top. Kâr/Zarar"]).sum()
+        pct = (t_p / total_cost * 100) if total_cost != 0 else 0
+
         c1, c2 = st.columns(2)
         c1.metric("Toplam Spot Varlık", f"{sym}{t_v:,.0f}")
-        c2.metric("Genel Kâr/Zarar", f"{sym}{t_p:,.0f}", delta=f"{t_p:,.0f}")
+        c2.metric(
+            "Genel Kâr/Zarar",
+            f"{sym}{t_p:,.0f}",
+            delta=f"{pct:.2f}%"
+        )
 
         st.divider()
 
@@ -395,7 +403,7 @@ if selected == "Dashboard":
             spot_only.groupby("Pazar", as_index=False)
             .agg({"Değer": "sum", "Top. Kâr/Zarar": "sum"})
         )
-        # Dashboard'da pazar bazlı grafik, normal mod (tüm dilimler yazılı)
+        # Dashboard → tüm dilimler yazılı (all_tab=False)
         render_pie_bar_charts(dash_pazar, "Pazar", all_tab=False)
 
         st.divider()
