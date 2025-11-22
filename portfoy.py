@@ -77,10 +77,7 @@ st.markdown("""
 
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
-    # Pazar FON ise Yahoo sembolü arama, direkt kodu döndür
-    if "FON" in pazar: 
-        return kod
-    
+    if "FON" in pazar: return kod 
     if "BIST" in pazar: return f"{kod}.IS" if not kod.endswith(".IS") else kod
     elif "KRIPTO" in pazar: return f"{kod}-USD" if not kod.endswith("-USD") else kod
     elif "EMTIA" in pazar:
@@ -105,29 +102,43 @@ def smart_parse(text_val):
     try: return float(val)
     except: return 0.0
 
-# --- TEFAS FON VERİSİ (GÜÇLENDİRİLDİ) ---
-@st.cache_data(ttl=14400) 
+# --- TEFAS VERİSİ (ÇİFT MOTORLU) ---
+@st.cache_data(ttl=3600) 
 def get_tefas_data(fund_code):
+    fund_code = fund_code.upper()
+    
+    # 1. YÖNTEM: DİREKT WEB KAZIMA (EN GÜVENİLİR)
+    try:
+        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            # HTML içinden fiyatı Regex ile bul
+            # Genellikle: <span id="MainContent_PanelInfo_lblPrice">1,863680</span>
+            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', response.text)
+            if match:
+                price_str = match.group(1).replace(",", ".")
+                current_price = float(price_str)
+                # Önceki fiyatı bulmak zor, şimdilik değişim için aynı değeri dönüyoruz
+                # (Veya değişim yüzdesini de çekebiliriz ama karmaşıklığı artırmayalım)
+                return current_price, current_price 
+    except:
+        pass
+
+    # 2. YÖNTEM: KÜTÜPHANE (YEDEK)
     try:
         crawler = Crawler()
-        # Veri aralığını 30 güne çıkardım ki hafta sonu/tatil boşluklarına düşmesin
         end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        
+        start_date = (datetime.now() - timedelta(days=15)).strftime("%Y-%m-%d")
         result = crawler.fetch(start=start_date, end=end_date, name=fund_code, columns=["Price"])
-        
         if not result.empty:
-            # Tarihe göre sırala
-            result = result.sort_index()
-            # En son veriyi al
-            current_price = result["Price"].iloc[-1]
-            # Bir önceki veriyi al (Eğer tek veri varsa, değişim yok demektir)
-            prev_price = result["Price"].iloc[-2] if len(result) > 1 else current_price
-            
-            return float(current_price), float(prev_price)
-        return 0.0, 0.0
-    except: 
-        return 0.0, 0.0
+            current_price = result["Price"].iloc[0]
+            prev_price = result["Price"].iloc[1] if len(result) > 1 else current_price
+            return current_price, prev_price
+    except:
+        pass
+
+    return 0, 0
 
 # --- COINGECKO GLOBAL VERİ ---
 @st.cache_data(ttl=300)
@@ -242,7 +253,6 @@ def get_tickers_data(df_portfolio, usd_try):
         for _, row in assets.iterrows():
             kod = row['Kod']
             pazar = row['Pazar']
-            # FONLARI ŞERİDE ALMA (Gecikmeli veri olduğu için anlık şeritte yanıltır)
             if "Fiziki" not in pazar and "Gram" not in kod and "FON" not in pazar:
                 sym = get_yahoo_symbol(kod, pazar)
                 portfolio_symbols[kod] = sym
@@ -433,23 +443,17 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU (FON VE PAZAR FİX) ---
+# --- HESAPLAMA MOTORU (ÇİFT MOTORLU + KORUMALI) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
-    
-    # FON LİSTESİ
-    KNOWN_FUNDS = ["YHB", "TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "OJT", "HKH", "IPB", "KZL", "RPD"]
-
     for i, row in df.iterrows():
         kod = row.get("Kod", "")
         pazar_raw = row.get("Pazar", "")
         
-        # FON TANIMA KORUMASI
-        if kod in KNOWN_FUNDS:
-            pazar = "FON"
-        else:
-            pazar = pazar_raw
+        # OTOMATİK FON TANIMA
+        KNOWN_FUNDS = ["YHB", "TTE", "MAC", "AFT", "AFA", "YAY", "IPJ", "TCD", "NNF", "GMR", "TI2", "TI3", "IHK", "IDH", "OJT", "HKH", "IPB", "KZL", "RPD"]
+        pazar = "FON" if kod in KNOWN_FUNDS else pazar_raw
 
         adet = smart_parse(row.get("Adet", 0))
         maliyet = smart_parse(row.get("Maliyet", 0))
@@ -486,11 +490,12 @@ def run_analysis(df, usd_try_rate, view_currency):
             curr_price = maliyet
             prev_close = maliyet
         
-        # Fiyat bulunamadıysa Maliyet al (Zarar gösterme)
-        if curr_price == 0: curr_price = maliyet
-        if prev_close == 0: prev_close = curr_price # Günlük değişim saçmalamasın
+        # FİYAT ÇEKİLEMEZSE 0 YAZMA, MALİYETİ KULLAN (Nötr)
+        if curr_price == 0: 
+            curr_price = maliyet
+            prev_close = maliyet
 
-        # 100x Koruma Kalkanı
+        # 100 KAT KORUMASI (3026 TL -> 30.26 TL)
         if curr_price > 0 and maliyet > 0:
             if (maliyet / curr_price) > 50: 
                 maliyet = maliyet / 100
@@ -721,8 +726,8 @@ elif selected == "Ekle/Çıkar":
             manuel_kod = st.text_input("Veya Manuel Yaz (Örn: TTE)").upper()
             
             c1, c2 = st.columns(2)
-            adet_str = c1.text_input("Adet (Örn: 119)", value="0")
-            maliyet_str = c2.text_input("Maliyet (Örn: 30,26)", value="0")
+            adet_str = c1.text_input("Adet", value="0")
+            maliyet_str = c2.text_input("Maliyet", value="0")
             not_inp = st.text_input("Not")
 
             try:
