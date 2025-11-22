@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 from tefas import Crawler 
 import feedparser
+import requests # YENİ: CoinGecko için gerekli
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(
@@ -34,7 +35,7 @@ st.markdown("""
     div[data-testid="stMetricValue"] { color: #ffffff !important; }
     div[data-testid="stMetricLabel"] { color: #d0d0d0 !important; }
     
-    /* Ticker Tape (Yazı Tipi: Courier New, Kalın) */
+    /* Ticker Tape */
     .ticker-container {
         width: 100%;
         overflow: hidden;
@@ -109,6 +110,26 @@ def get_tefas_data(fund_code):
             return current_price, prev_price
         return 0, 0
     except: return 0, 0
+
+# --- COINGECKO GLOBAL VERİ (YENİ: BTC DOMINANCE & TOTAL MCAP) ---
+@st.cache_data(ttl=300)
+def get_coingecko_globals():
+    try:
+        url = "https://api.coingecko.com/api/v3/global"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()['data']
+            btc_dom = data['market_cap_percentage']['btc']
+            eth_dom = data['market_cap_percentage']['eth']
+            total_mcap = data['total_market_cap']['usd']
+            
+            # Market Cap Değişimi (24h)
+            mcap_change = data.get('market_cap_change_percentage_24h_usd', 0)
+            
+            return btc_dom, eth_dom, total_mcap, mcap_change
+    except:
+        pass
+    return 0, 0, 0, 0
 
 # --- HABER AKIŞI ---
 @st.cache_data(ttl=300)
@@ -186,26 +207,26 @@ def save_data_to_sheet(df):
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
-# --- MARKET VE PORTFÖY ŞERİDİ (ÖZEL SIRALAMA) ---
+# --- MARKET VE PORTFÖY ŞERİDİ (GÜNCELLENDİ) ---
 @st.cache_data(ttl=45) 
-def get_combined_ticker(df_portfolio):
-    # İstediğin Özel Sıralama İçin Ticker Listesi
-    # BIST 100 / USD / EUR / GR ALTIN / GR GÜMÜŞ / ONS ALTIN / ONS GÜMÜŞ / NASDAQ / SP500 / BTC / ETH
+def get_combined_ticker(df_portfolio, usd_try):
+    # COINGECKO VERİLERİ (Dominance & Total Cap)
+    btc_d, eth_d, total_mcap, mcap_chg = get_coingecko_globals()
     
-    # Veri çekilecek ham semboller
-    raw_symbols = [
-        "XU100.IS",   # BIST 100
-        "TRY=X",      # USD/TRY
-        "EURTRY=X",   # EUR/TRY
-        "GC=F",       # Ons Altın
-        "SI=F",       # Ons Gümüş
-        "^IXIC",      # NASDAQ
-        "^GSPC",      # S&P 500
-        "BTC-USD",    # BTC
-        "ETH-USD"     # ETH
-    ]
+    # Global Piyasalar Listesi
+    market_symbols = {
+        "BIST 100": "XU100.IS", 
+        "USD": "TRY=X", 
+        "EUR": "EURTRY=X", 
+        "Altın": "GC=F", 
+        "Gümüş(Ons)": "SI=F", 
+        "NASDAQ": "^IXIC",
+        "S&P 500": "^GSPC",
+        "BTC": "BTC-USD",
+        "ETH": "ETH-USD"
+    }
     
-    # Portföydeki hisseler
+    # Portföy
     portfolio_symbols = {}
     if not df_portfolio.empty:
         assets = df_portfolio[df_portfolio["Tip"] == "Portfoy"]
@@ -216,127 +237,48 @@ def get_combined_ticker(df_portfolio):
                 sym = get_yahoo_symbol(kod, pazar)
                 portfolio_symbols[kod] = sym
 
-    # Hepsini tek seferde çek
-    all_fetch_list = list(set(raw_symbols + list(portfolio_symbols.values())))
+    all_tickers = list(market_symbols.values()) + list(portfolio_symbols.values())
+    all_tickers = list(set(all_tickers))
     
     data_str = '<span style="color:#4da6ff">🌍 PİYASA:</span> &nbsp;'
     
     try:
-        yahoo_data = yf.Tickers(" ".join(all_fetch_list))
+        # Yahoo Data Çek
+        yahoo_data = yf.Tickers(" ".join(all_tickers))
         
-        # USD Kuru (Gram hesabı için lazım)
-        try: usd_rate = yahoo_data.tickers["TRY=X"].history(period="1d")['Close'].iloc[-1]
-        except: usd_rate = 34.0
-
-        # --- 1. BIST 100 ---
+        # 1. ÖNCE BIST, DOVIZ, ALTIN
+        # Manuel ekleme sırası (Yahoo verileriyle)
+        
+        # Gram Gümüş Hesabı (Özel)
         try:
-            h = yahoo_data.tickers["XU100.IS"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'BIST 100: <span style="color:white">{p:,.0f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
+            silver_ons = yahoo_data.tickers["SI=F"].history(period="1d")['Close'].iloc[-1]
+            gram_silver = (silver_ons * usd_try) / 31.1035
+            data_str += f'GR GÜMÜŞ: <span style="color:white">{gram_silver:.2f}</span> &nbsp;|&nbsp; '
         except: pass
 
-        # --- 2. USD ---
-        try:
-            h = yahoo_data.tickers["TRY=X"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'USD: <span style="color:white">{p:.4f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
+        for name, sym in market_symbols.items():
+            if name == "Gümüş(Ons)": continue 
+            try:
+                hist = yahoo_data.tickers[sym].history(period="2d")
+                if not hist.empty:
+                    price = hist['Close'].iloc[-1]
+                    prev = hist['Close'].iloc[-2]
+                    change = ((price - prev) / prev) * 100
+                    color = "#00e676" if change >= 0 else "#ff5252"
+                    arrow = "▲" if change >= 0 else "▼"
+                    data_str += f'{name}: <span style="color:white">{price:,.2f}</span> <span style="color:{color}">{arrow}%{change:.2f}</span> &nbsp;|&nbsp; '
+            except: pass
+        
+        # 2. KRIPTO GLOBAL VERİLERİ (CoinGecko'dan)
+        if total_mcap > 0:
+            t_color = "#00e676" if mcap_chg >= 0 else "#ff5252"
+            t_arrow = "▲" if mcap_chg >= 0 else "▼"
+            total_mcap_t = total_mcap / 1_000_000_000_000 # Trilyon hesabı
+            data_str += f'KRIPTO TOPLAM: <span style="color:white">${total_mcap_t:.2f}T</span> <span style="color:{t_color}">{t_arrow}%{mcap_chg:.2f}</span> &nbsp;|&nbsp; '
+            data_str += f'BTC.D: <span style="color:#f2a900">% {btc_d:.2f}</span> &nbsp;|&nbsp; '
+            data_str += f'ETH.D: <span style="color:#627eea">% {eth_d:.2f}</span> &nbsp;|&nbsp; '
 
-        # --- 3. EUR ---
-        try:
-            h = yahoo_data.tickers["EURTRY=X"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'EUR: <span style="color:white">{p:.4f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # --- 4. GRAM ALTIN (TL) ---
-        try:
-            h_ons = yahoo_data.tickers["GC=F"].history(period="2d")
-            ons_now, ons_prev = h_ons['Close'].iloc[-1], h_ons['Close'].iloc[-2]
-            # Dünkü kur (Yaklaşık)
-            h_usd = yahoo_data.tickers["TRY=X"].history(period="2d")
-            usd_now, usd_prev = h_usd['Close'].iloc[-1], h_usd['Close'].iloc[-2]
-            
-            gr_now = (ons_now * usd_now) / 31.1035
-            gr_prev = (ons_prev * usd_prev) / 31.1035
-            chg = ((gr_now - gr_prev) / gr_prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'GR ALTIN: <span style="color:white">{gr_now:.2f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # --- 5. GRAM GÜMÜŞ (TL) ---
-        try:
-            h_ons = yahoo_data.tickers["SI=F"].history(period="2d")
-            ons_now, ons_prev = h_ons['Close'].iloc[-1], h_ons['Close'].iloc[-2]
-            # Dünkü kur yukarıda var
-            gr_now = (ons_now * usd_rate) / 31.1035
-            gr_prev = (ons_prev * usd_prev) / 31.1035 # Yaklaşık önceki kur
-            chg = ((gr_now - gr_prev) / gr_prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'GR GÜMÜŞ: <span style="color:white">{gr_now:.2f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # --- 6. ONS ALTIN ---
-        try:
-            h = yahoo_data.tickers["GC=F"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'ONS ALTIN: <span style="color:white">{p:,.2f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # --- 7. ONS GÜMÜŞ ---
-        try:
-            h = yahoo_data.tickers["SI=F"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'ONS GÜMÜŞ: <span style="color:white">{p:,.2f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # --- 8. NASDAQ ---
-        try:
-            h = yahoo_data.tickers["^IXIC"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'NASDAQ: <span style="color:white">{p:,.0f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # --- 9. S&P 500 ---
-        try:
-            h = yahoo_data.tickers["^GSPC"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'S&P 500: <span style="color:white">{p:,.0f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # --- 10. BTC ---
-        try:
-            h = yahoo_data.tickers["BTC-USD"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'BTC: <span style="color:white">{p:,.0f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # --- 11. ETH ---
-        try:
-            h = yahoo_data.tickers["ETH-USD"].history(period="2d")
-            p, prev = h['Close'].iloc[-1], h['Close'].iloc[-2]
-            chg = ((p - prev) / prev) * 100
-            c, a = ("#00e676", "▲") if chg >= 0 else ("#ff5252", "▼")
-            data_str += f'ETH: <span style="color:white">{p:,.0f}</span> <span style="color:{c}">{a}%{chg:.2f}</span> &nbsp;|&nbsp; '
-        except: pass
-
-        # PORTFÖY SAĞDA
+        # 3. PORTFÖYÜM SAĞDA
         if portfolio_symbols:
             data_str += '&nbsp;&nbsp;&nbsp; <span style="color:#ffd700">💼 PORTFÖYÜM:</span> &nbsp;'
             for name, sym in portfolio_symbols.items():
@@ -352,7 +294,6 @@ def get_combined_ticker(df_portfolio):
                 except: pass
     except: data_str = "Veriler yükleniyor..."
     
-    # İçeriği iki kere yazıyoruz ki animasyon kayarken boşluk oluşmasın (Sonsuz döngü hilesi)
     return f'<div class="ticker-text">{data_str} &nbsp;&nbsp;&nbsp; {data_str}</div>'
 
 portfoy_df = get_data_from_sheet()
@@ -365,11 +306,22 @@ with c_toggle:
     st.write("") 
     GORUNUM_PB = st.radio("Para Birimi:", ["TRY", "USD"], horizontal=True)
 
-# --- KAYAN YAZI ---
-ticker_html = get_combined_ticker(portfoy_df)
+@st.cache_data(ttl=300)
+def get_usd_try():
+    try:
+        ticker = yf.Ticker("TRY=X")
+        hist = ticker.history(period="1d")
+        if not hist.empty: return hist['Close'].iloc[-1]
+        return 34.0
+    except: return 34.0
+
+USD_TRY = get_usd_try()
+
+# --- KAYAN ŞERİT ---
+ticker_html = get_combined_ticker(portfoy_df, USD_TRY)
 st.markdown(f"""<div class="ticker-container">{ticker_html}</div>""", unsafe_allow_html=True)
 
-# --- NAVİGASYON MENÜSÜ (HOVER GRİ YAPILDI) ---
+# --- NAVİGASYON MENÜSÜ (HOVER GRİ) ---
 selected = option_menu(
     menu_title=None, 
     options=["Dashboard", "Tümü", "BIST", "ABD", "FON", "Emtia", "Fiziki", "Kripto", "Haberler", "İzleme", "Satışlar", "Ekle/Çıkar"], 
@@ -384,7 +336,7 @@ selected = option_menu(
             "font-size": "14px", 
             "text-align": "center", 
             "margin":"0px", 
-            "--hover-color": "#444444", # HOVER RENGİ KOYU GRİ YAPILDI
+            "--hover-color": "#444444", 
             "font-weight": "bold", 
             "color": "#bfbfbf"
         },
@@ -403,17 +355,6 @@ MARKET_DATA = {
     "EMTIA": ["Gram Altın (TL)", "Gram Gümüş (TL)", "Altın ONS", "Gümüş ONS", "Petrol", "Doğalgaz"],
     "FIZIKI VARLIKLAR": ["Gram Altın (Fiziki)", "Çeyrek Altın", "Yarım Altın", "Tam Altın", "Dolar (Nakit)"]
 }
-
-@st.cache_data(ttl=300)
-def get_usd_try():
-    try:
-        ticker = yf.Ticker("TRY=X")
-        hist = ticker.history(period="1d")
-        if not hist.empty: return hist['Close'].iloc[-1]
-        return 34.0
-    except: return 34.0
-
-USD_TRY = get_usd_try()
 
 # --- DETAYLI ANALİZ ---
 def render_detail_view(symbol, pazar):
@@ -670,7 +611,7 @@ elif selected == "Tümü":
     if not portfoy_only.empty:
         st.markdown("#### 🔍 Detaylı Analiz")
         all_assets = portfoy_only["Kod"].unique().tolist()
-        secilen = st.selectbox("İncelemek istediğiniz varlığı seçin:", all_assets, index=None, placeholder="Seçiniz...")
+        secilen = st.selectbox("İncelemek istediğiniz varlığı seçin:", all_assets, index=None, placeholder="Varlık Seç...")
         if secilen:
             row = portfoy_only[portfoy_only["Kod"] == secilen].iloc[0]
             sym = get_yahoo_symbol(row["Kod"], row["Pazar"])
