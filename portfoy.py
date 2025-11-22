@@ -92,25 +92,23 @@ def get_yahoo_symbol(kod, pazar):
         return kod
     return kod 
 
-# --- ZIRHLI SAYI ÇEVİRİCİ ---
+# --- TÜRK USULÜ SAYI ÇEVİRİCİ (KESİN ÇÖZÜM) ---
 def smart_parse(text_val):
+    """
+    Türkçe karakter (virgül) dostu sayı çevirici.
+    85,26 -> 85.26 olarak algılar.
+    1.200,50 -> 1200.50 olarak algılar.
+    """
     if text_val is None: return 0.0
+    if isinstance(text_val, (int, float)): return float(text_val)
+    
     val = str(text_val).strip()
     if not val: return 0.0
     
-    # Sadece sayı, nokta ve virgül bırak
-    val = re.sub(r"[^\d.,]", "", val)
-    
-    # Eğer 30.26.0 gibi hatalı format varsa düzelt
-    if val.count('.') > 1 and ',' not in val:
-        parts = val.split('.')
-        val = f"{parts[0]}.{''.join(parts[1:])}"
-    
-    # Nokta/Virgül karmaşasını çöz
-    if "." in val and "," in val:
-        val = val.replace(".", "").replace(",", ".")
-    elif "," in val:
-        val = val.replace(",", ".")
+    # Eğer içinde VIRGÜL varsa, o kesin ondalıktır. Noktaları sil.
+    if "," in val:
+        val = val.replace(".", "") # Noktaları (binlik) sil
+        val = val.replace(",", ".") # Virgülü nokta yap (Python anlasın)
     
     try:
         return float(val)
@@ -435,7 +433,7 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU (YENİLENDİ: ZIRHLI HESAP) ---
+# --- HESAPLAMA MOTORU (ZIRHLI OKUMA - FİNAL) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
@@ -443,7 +441,8 @@ def run_analysis(df, usd_try_rate, view_currency):
         kod = row.get("Kod", "")
         pazar = row.get("Pazar", "")
         
-        # OKURKEN SMART PARSE
+        # --- VERİ OKUMA KISMI GÜNCELLENDİ ---
+        # Veritabanından okurken de smart_parse kullanıyoruz
         adet = smart_parse(row.get("Adet", 0))
         maliyet = smart_parse(row.get("Maliyet", 0))
         
@@ -478,12 +477,14 @@ def run_analysis(df, usd_try_rate, view_currency):
         except: 
             curr_price = maliyet
             prev_close = maliyet
-
-        # --- GÜVENLİK DUVARI: OTOMATİK MALİYET DÜZELTME ---
-        # Eğer fiyat 30 TL ama maliyet 3026 TL ise, maliyeti 100'e böl
+        
+        # --- SON KORUMA: FİYAT ÇOK UÇUKSA DÜZELT ---
         if curr_price > 0 and maliyet > 0:
-            if (maliyet / curr_price) > 50: # 50 kat fark varsa
-                 maliyet = maliyet / 100
+            # Eğer maliyet, güncel fiyatın 50 katından fazlaysa
+            # Demek ki yine binlik hatasıyla okunmuş (30.26 yerine 3026 gibi)
+            # Bunu otomatik 100'e bölerek düzeltelim.
+            if (maliyet / curr_price) > 50: 
+                maliyet = maliyet / 100
 
         val_native = curr_price * adet
         cost_native = maliyet * adet
@@ -517,7 +518,7 @@ def run_analysis(df, usd_try_rate, view_currency):
         
         results.append({
             "Kod": kod, "Pazar": pazar, "Tip": row["Tip"],
-            "Adet": adet, "Maliyet": maliyet, # Düzeltilmiş Maliyet
+            "Adet": adet, "Maliyet": maliyet,
             "Fiyat": fiyat_goster, "PB": view_currency,
             "Değer": val_goster, "Top. Kâr/Zarar": pnl, "Top. %": pnl_pct,
             "Gün. Kâr/Zarar": daily_chg, "Notlar": row.get("Notlar", "")
@@ -701,9 +702,9 @@ elif selected == "Ekle/Çıkar":
     
     with tab_ekle:
         st.info("💡 İpucu: Ondalık sayılar için **VİRGÜL ( , )** kullanın. Örn: **30,26**")
-        
         islem_tipi = st.radio("Tür", ["Portföy", "Takip"], horizontal=True)
         yeni_pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()))
+        if "ABD" in yeni_pazar: st.warning("🇺🇸 ABD için Maliyeti DOLAR girin.")
         secenekler = MARKET_DATA.get(yeni_pazar, [])
         with st.form("add_asset_form"):
             yeni_kod = st.selectbox("Listeden Seç", options=secenekler, index=None, placeholder="Seçiniz...")
@@ -742,7 +743,6 @@ elif selected == "Ekle/Çıkar":
                 else:
                     st.error("Lütfen geçerli değerler girin.")
 
-    # --- DÜZENLE ---
     with tab_duzenle:
         st.subheader("✏️ Mevcut Kaydı Düzenle")
         if not portfoy_df.empty:
@@ -753,6 +753,9 @@ elif selected == "Ekle/Çıkar":
                 mevcut_row = portfoy_df[portfoy_df["Kod"] == secilen_duz].iloc[0]
                 curr_adet = smart_parse(mevcut_row["Adet"])
                 curr_maliyet = smart_parse(mevcut_row["Maliyet"])
+                curr_pazar = mevcut_row["Pazar"]
+                curr_tip = mevcut_row["Tip"]
+                curr_not = mevcut_row["Notlar"]
                 
                 st.info(f"Mevcut: **{curr_adet:g}** Adet | **{curr_maliyet:g}** Maliyet")
                 
@@ -766,9 +769,9 @@ elif selected == "Ekle/Çıkar":
                     
                     portfoy_df = portfoy_df[portfoy_df["Kod"] != secilen_duz]
                     yeni_satir = pd.DataFrame({
-                        "Kod": [secilen_duz], "Pazar": [mevcut_row["Pazar"]], 
+                        "Kod": [secilen_duz], "Pazar": [curr_pazar], 
                         "Adet": [y_adet], "Maliyet": [y_maliyet],
-                        "Tip": [mevcut_row["Tip"]], "Notlar": [mevcut_row["Notlar"]]
+                        "Tip": [curr_tip], "Notlar": [curr_not]
                     })
                     portfoy_df = pd.concat([portfoy_df, yeni_satir], ignore_index=True)
                     save_data_to_sheet(portfoy_df)
@@ -776,7 +779,6 @@ elif selected == "Ekle/Çıkar":
                     time.sleep(1)
                     st.rerun()
 
-    # --- SATIŞ / SİLME ---
     with tab_sil:
         if not portfoy_df.empty:
             varliklar = portfoy_df[portfoy_df["Tip"] == "Portfoy"]["Kod"].unique()
