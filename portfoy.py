@@ -475,19 +475,21 @@ def render_detail_view(symbol, pazar):
 # --- HESAPLAMA MOTORU (DÜZELTİLDİ) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
-    if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
+    if df.empty:
+        return pd.DataFrame(columns=ANALYSIS_COLS)
     for i, row in df.iterrows():
         kod = row.get("Kod", "")
         pazar = row.get("Pazar", "")
         
-        # BURASI ÇOK ÖNEMLİ: Veriyi çekerken smart_parse ile temizle
         adet = smart_parse(row.get("Adet", 0))
         maliyet = smart_parse(row.get("Maliyet", 0))
         
-        if not kod: continue 
+        if not kod:
+            continue 
         symbol = get_yahoo_symbol(kod, pazar)
         asset_currency = "USD"
-        if "BIST" in pazar or "TL" in kod or "Fiziki" in pazar or pazar == "FON": asset_currency = "TRY"
+        if "BIST" in pazar or "TL" in kod or "Fiziki" in pazar or pazar == "FON":
+            asset_currency = "TRY"
         
         curr_price = 0
         prev_close = 0
@@ -500,8 +502,9 @@ def run_analysis(df, usd_try_rate, view_currency):
                 if len(hist) > 1:
                     curr_price = (hist['Close'].iloc[-1] * usd_try_rate) / 31.1035
                     prev_close = (hist['Close'].iloc[-2] * usd_try_rate) / 31.1035
-                else: curr_price = maliyet
-                prev_close = maliyet
+                else:
+                    curr_price = maliyet
+                    prev_close = maliyet
             elif "Fiziki" in pazar: 
                 curr_price = maliyet
                 prev_close = maliyet
@@ -513,9 +516,16 @@ def run_analysis(df, usd_try_rate, view_currency):
                 else: 
                     curr_price = maliyet
                     prev_close = maliyet
-        except: 
+        except:
             curr_price = maliyet
             prev_close = maliyet
+
+        # 🔥 BURASI YENİ: 100x şişmiş maliyeti otomatik düzelt
+        if curr_price > 0 and maliyet > 0:
+            ratio = maliyet / curr_price
+            # Maliyet, fiyattan çok çok büyükse ve saçma görünüyorsa
+            if ratio > 20 and maliyet > 100:
+                maliyet = maliyet / 100.0
 
         val_native = curr_price * adet
         cost_native = maliyet * adet
@@ -555,6 +565,7 @@ def run_analysis(df, usd_try_rate, view_currency):
             "Gün. Kâr/Zarar": daily_chg, "Notlar": row.get("Notlar", "")
         })
     return pd.DataFrame(results)
+
 
 @st.cache_data(ttl=3600)
 def get_historical_chart(df, usd_try):
@@ -872,3 +883,4 @@ elif selected == "Ekle/Çıkar":
                         time.sleep(1)
                         st.rerun()
         else: st.info("İşlem yapılacak varlık yok.")
+
