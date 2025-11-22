@@ -78,6 +78,7 @@ st.markdown("""
 # --- YARDIMCI FONKSİYONLAR ---
 def get_yahoo_symbol(kod, pazar):
     kod = str(kod).upper()
+    
     # TRMET Düzeltmesi
     if kod == "TRMET": return "KOZAA.IS"
     
@@ -192,12 +193,6 @@ def get_data_from_sheet():
         expected_cols = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
         for col in expected_cols:
             if col not in df.columns: df[col] = "" 
-        
-        # --- FON İSİM DÜZELTME ---
-        # "FON (TEFAS/BES)" veya "FON" geçenleri tek tip "FON" yap
-        if not df.empty:
-            df["Pazar"] = df["Pazar"].apply(lambda x: "FON" if "FON" in str(x) else x)
-            
         return df
     except:
         return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
@@ -444,7 +439,7 @@ def render_detail_view(symbol, pazar):
     except Exception as e:
         st.error(f"Veri çekilemedi: {e}")
 
-# --- HESAPLAMA MOTORU (PAZAR ODAKLI + FON FİX) ---
+# --- HESAPLAMA MOTORU (GRAM GÜMÜŞ VE TRMET FİX) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
     if df.empty: return pd.DataFrame(columns=ANALYSIS_COLS)
@@ -455,7 +450,6 @@ def run_analysis(df, usd_try_rate, view_currency):
         kod = row.get("Kod", "")
         pazar_raw = row.get("Pazar", "")
         
-        # FON TANIMA KORUMASI
         if kod in KNOWN_FUNDS:
             pazar = "FON"
         else:
@@ -476,17 +470,20 @@ def run_analysis(df, usd_try_rate, view_currency):
             if "FON" in pazar:
                 curr_price, prev_close = get_tefas_data(kod)
             
+            # --- GRAM GÜMÜŞ (FİZİKİ VE EMTİA KAPSAR) ---
             elif "Gram Gümüş" in kod:
                 hist = yf.Ticker("SI=F").history(period="2d")
                 if len(hist) > 0:
                     ons_now = hist['Close'].iloc[-1]
                     ons_prev = hist['Close'].iloc[-2] if len(hist) > 1 else ons_now
+                    # FORMÜL: (ONS GÜMÜŞ * DOLAR) / 31.1035
                     curr_price = (ons_now * usd_try_rate) / 31.1035
                     prev_close = (ons_prev * usd_try_rate) / 31.1035
                 else:
                     curr_price = maliyet
                     prev_close = maliyet
 
+            # --- GRAM ALTIN ---
             elif "Gram Altın" in kod:
                 hist = yf.Ticker("GC=F").history(period="2d")
                 if len(hist) > 0:
@@ -513,12 +510,14 @@ def run_analysis(df, usd_try_rate, view_currency):
             curr_price = 0
             prev_close = 0
         
+        # Fiyat Yoksa Maliyeti Kullan
         if curr_price == 0: 
             curr_price = maliyet
             prev_close = maliyet
         
         if prev_close == 0: prev_close = curr_price
 
+        # 100 Kat Koruması
         if curr_price > 0 and maliyet > 0:
             if (maliyet / curr_price) > 50: 
                 maliyet = maliyet / 100
@@ -569,6 +568,7 @@ def get_historical_chart(df, usd_try):
     for idx, row in df.iterrows():
         kod = row['Kod']
         pazar = row['Pazar']
+        # GRAM VE FİZİKİ HARİÇ
         if "Gram" not in kod and "Fiziki" not in pazar and "FON" not in pazar:
             sym = get_yahoo_symbol(kod, pazar)
             try: adet = smart_parse(row['Adet'])
@@ -621,6 +621,7 @@ def render_pazar_tab(df, filter_text, currency_symbol):
     c1.metric(f"Toplam {filter_text} Varlık", f"{currency_symbol}{total_val:,.0f}")
     c2.metric(f"Toplam {filter_text} Kâr/Zarar", f"{currency_symbol}{total_pl:,.0f}", delta=f"{total_pl:,.0f}")
     
+    # GRAFİKLER (PASTA VE ÇUBUK)
     st.divider()
     col_pie, col_bar = st.columns([1, 1])
     with col_pie:
@@ -680,6 +681,19 @@ if selected == "Dashboard":
 
 elif selected == "Tümü":
     if not portfoy_only.empty:
+        # GRAFİKLER EKLENDİ
+        col_pie_det, col_bar_det = st.columns([1, 1])
+        with col_pie_det:
+            st.subheader("Varlık Bazlı Dağılım")
+            fig_pie_det = px.pie(portfoy_only, values='Değer', names='Kod', hole=0.4)
+            st.plotly_chart(fig_pie_det, use_container_width=True)
+        with col_bar_det:
+            st.subheader("Varlık Bazlı Değerler")
+            top_assets = portfoy_only.sort_values(by="Değer", ascending=False)
+            fig_bar_det = px.bar(top_assets, x='Kod', y='Değer', color='Pazar')
+            st.plotly_chart(fig_bar_det, use_container_width=True)
+        
+        st.divider()
         st.markdown("#### 🔍 Detaylı Analiz")
         all_assets = portfoy_only["Kod"].unique().tolist()
         secilen = st.selectbox("İncelemek istediğiniz varlığı seçin:", all_assets, index=None, placeholder="Varlık Seç...")
