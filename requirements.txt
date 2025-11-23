@@ -9,4 +9,3 @@ streamlit-option-menu
 feedparser
 requests
 ccxt
-streamlit-aggrid
