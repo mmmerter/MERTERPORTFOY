@@ -11,7 +11,7 @@ from utils import (
     KNOWN_FUNDS,
     MARKET_DATA,
     smart_parse,
-    styled_dataframe,   # dursun, ama tablo için render_table kullanıyoruz
+    styled_dataframe,
     get_yahoo_symbol,
     render_table,
 )
@@ -116,14 +116,28 @@ st.markdown(
     a { text-decoration: none !important; }
     a:hover { text-decoration: underline !important; }
 
-    /* AGGRID FONT BÜYÜTME */
-    .ag-theme-streamlit .ag-header-cell-label {
-        font-size: 15px;
-        font-weight: bold;
+    /* TABLO STİLİ (render_table için) */
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 16px;
+        color: #ffffff;
     }
-    .ag-theme-streamlit .ag-cell {
-        font-size: 15px;
-        font-weight: bold;
+    .custom-table th, .custom-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid #333;
+    }
+    .custom-table th {
+        font-weight: 700;
+        text-align: center;
+    }
+    .custom-table td {
+        font-weight: 600;
+        text-align: right;
+    }
+    .custom-table td:first-child,
+    .custom-table th:first-child {
+        text-align: left;
     }
 </style>
 """,
@@ -395,16 +409,9 @@ if selected == "Dashboard":
         t_v = spot_only["Değer"].sum()
         t_p = spot_only["Top. Kâr/Zarar"].sum()
 
-        total_cost = (spot_only["Değer"] - spot_only["Top. Kâr/Zarar"]).sum()
-        pct = (t_p / total_cost * 100) if total_cost != 0 else 0
-
         c1, c2 = st.columns(2)
         c1.metric("Toplam Spot Varlık", f"{sym}{t_v:,.0f}")
-        c2.metric(
-            "Genel Kâr/Zarar",
-            f"{sym}{t_p:,.0f}",
-            delta=f"{pct:.2f}%",
-        )
+        c2.metric("Genel Kâr/Zarar", f"{sym}{t_p:,.0f}", delta=f"{t_p:,.0f}")
 
         st.divider()
 
@@ -413,7 +420,7 @@ if selected == "Dashboard":
             spot_only.groupby("Pazar", as_index=False)
             .agg({"Değer": "sum", "Top. Kâr/Zarar": "sum"})
         )
-        render_pie_bar_charts(dash_pazar, "Pazar", all_tab=False)
+        render_pie_bar_charts(dash_pazar, "Pazar")
 
         st.divider()
 
@@ -429,9 +436,11 @@ if selected == "Dashboard":
 
         color_col = "Top. %"
         spot_only = spot_only.copy()
-        spot_only["Gün. %"] = (
-            spot_only["Gün. Kâr/Zarar"]
-            / (spot_only["Değer"] - spot_only["Gün. Kâr/Zarar"])
+        safe_val = spot_only["Değer"] - spot_only["Gün. Kâr/Zarar"]
+        spot_only["Gün. %"] = 0
+        spot_only.loc[safe_val != 0, "Gün. %"] = (
+            spot_only.loc[safe_val != 0, "Gün. Kâr/Zarar"]
+            / safe_val[safe_val != 0]
         ) * 100
 
         if map_mode == "Günlük Değişim %":
@@ -461,10 +470,9 @@ if selected == "Dashboard":
 elif selected == "Tümü":
     if not portfoy_only.empty:
         st.subheader("📊 Varlık Bazlı Dağılım (Tümü)")
-        render_pie_bar_charts(portfoy_only, "Kod", all_tab=True)
+        render_pie_bar_charts(portfoy_only, "Kod")
 
         st.divider()
-
         render_table(portfoy_only)
     else:
         st.info("Portföy boş.")
