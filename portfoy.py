@@ -24,6 +24,9 @@ from data_loader import (
     get_financial_news,
     get_tefas_data,
     get_binance_positions,
+    read_portfolio_history,
+    write_portfolio_history,
+    get_timeframe_changes,
 )
 from charts import (
     render_pie_bar_charts,
@@ -434,11 +437,21 @@ takip_only = master_df[master_df["Tip"] == "Takip"]
 
 
 # --- GLOBAL INFO BAR ---
-def render_kral_infobar(df, sym):
+
+# --- GLOBAL INFO BAR ---
+def render_kral_infobar(df, sym, gorunum_pb=None, usd_try_rate=None, timeframe=None, show_sparklines=False):
+    """
+    KRAL infobar:
+    - Toplam Varlık
+    - Son 24 Saat K/Z
+    - Haftalık / Aylık / YTD (opsiyonel, timeframe ile)
+    - İstenirse altında mini sparkline'lar
+    """
     if df is None or df.empty:
         return
 
-    total_value = df["Değer"].sum()
+    # Mevcut görünümdeki toplam değer (df'nin para biriminde)
+    total_value_view = df["Değer"].sum()
     daily_pnl = df["Gün. Kâr/Zarar"].sum()
 
     if daily_pnl > 0:
@@ -448,16 +461,41 @@ def render_kral_infobar(df, sym):
     else:
         daily_sign = "⚪"
 
+    # Haftalık / Aylık / YTD metinleri (varsayılan)
     weekly_txt = "—"
     monthly_txt = "—"
     ytd_txt = "—"
+
+    # Timeframe verisi geldiyse gerçek rakamlarla doldur
+    if timeframe is not None:
+        try:
+            w_val, w_pct = timeframe.get("weekly", (0, 0))
+            m_val, m_pct = timeframe.get("monthly", (0, 0))
+            y_val, y_pct = timeframe.get("ytd", (0, 0))
+
+            # Haftalık / Aylık / YTD değerler her zaman TRY bazlı tutuluyor
+            # Görünüm USD ise, gösterirken USD'ye çeviriyoruz.
+            show_sym = sym
+            if gorunum_pb == "USD" and usd_try_rate:
+                weekly_txt = f"{show_sym}{(w_val / usd_try_rate):,.0f} ({w_pct:+.2f}%)"
+                monthly_txt = f"{show_sym}{(m_val / usd_try_rate):,.0f} ({m_pct:+.2f}%)"
+                ytd_txt = f"{show_sym}{(y_val / usd_try_rate):,.0f} ({y_pct:+.2f}%)"
+            else:
+                weekly_txt = f"{show_sym}{w_val:,.0f} ({w_pct:+.2f}%)"
+                monthly_txt = f"{show_sym}{m_val:,.0f} ({m_pct:+.2f}%)"
+                ytd_txt = f"{show_sym}{y_val:,.0f} ({y_pct:+.2f}%)"
+        except Exception:
+            # Herhangi bir sorun olursa placeholder'da kalsın
+            weekly_txt = "—"
+            monthly_txt = "—"
+            ytd_txt = "—"
 
     st.markdown(
         f"""
         <div class="kral-infobar">
             <div class="kral-infobox">
                 <div class="kral-infobox-label">Toplam Varlık</div>
-                <span class="kral-infobox-value">{sym}{total_value:,.0f}</span>
+                <span class="kral-infobox-value">{sym}{total_value_view:,.0f}</span>
                 <div class="kral-infobox-sub">Bu görünümdeki toplam varlık</div>
             </div>
             <div class="kral-infobox">
@@ -468,23 +506,72 @@ def render_kral_infobar(df, sym):
             <div class="kral-infobox">
                 <div class="kral-infobox-label">Haftalık K/Z</div>
                 <span class="kral-infobox-value">{weekly_txt}</span>
-                <div class="kral-infobox-sub">Hazırlanıyor (tarihsel seri eklenecek)</div>
+                <div class="kral-infobox-sub">Son 7 güne göre</div>
             </div>
             <div class="kral-infobox">
                 <div class="kral-infobox-label">Aylık K/Z</div>
                 <span class="kral-infobox-value">{monthly_txt}</span>
-                <div class="kral-infobox-sub">Hazırlanıyor (tarihsel seri eklenecek)</div>
+                <div class="kral-infobox-sub">Son 30 güne göre</div>
             </div>
             <div class="kral-infobox">
                 <div class="kral-infobox-label">YTD Performans</div>
                 <span class="kral-infobox-value">{ytd_txt}</span>
-                <div class="kral-infobox-sub">Hazırlanıyor (yılbaşından beri)</div>
+                <div class="kral-infobox-sub">Yılbaşından bugüne</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    # İstenirse altına mini sparkline'lar
+    if show_sparklines and timeframe is not None:
+        try:
+            spark_week = timeframe.get("spark_week", [])
+            spark_month = timeframe.get("spark_month", [])
+            spark_ytd = timeframe.get("spark_ytd", [])
+
+            cols = st.columns(3)
+            # Haftalık spark
+            with cols[0]:
+                st.caption("Haftalık Trend")
+                fig_w = render_kpi_sparkline(spark_week)
+                if fig_w is not None:
+                    st.plotly_chart(fig_w, use_container_width=True)
+            # Aylık spark
+            with cols[1]:
+                st.caption("Aylık Trend")
+                fig_m = render_kpi_sparkline(spark_month)
+                if fig_m is not None:
+                    st.plotly_chart(fig_m, use_container_width=True)
+            # YTD spark
+            with cols[2]:
+                st.caption("YTD Trend")
+                fig_y = render_kpi_sparkline(spark_ytd)
+                if fig_y is not None:
+                    st.plotly_chart(fig_y, use_container_width=True)
+        except Exception:
+            # Grafiklerde sorun olsa bile infobar metinleri çalışmaya devam etsin
+            pass
+
+
+def render_kpi_sparkline(values):
+    """
+    KPI kartları altındaki mini sparkline grafikleri.
+    Değer listesi (TRY bazlı) alır, minimalist çizgi döner.
+    """
+    if not values or len(values) < 2:
+        return None
+
+    df = pd.DataFrame({"idx": list(range(len(values))), "val": values})
+    fig = px.line(df, x="idx", y="val")
+    fig.update_traces(line=dict(width=2))
+    fig.update_layout(
+        height=70,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+    )
+    return fig
 
 # --- GÖRÜNÜM AYARI ---
 TOTAL_SPOT_DEGER = portfoy_only["Değer"].sum()
@@ -501,16 +588,44 @@ st.markdown("---")
 
 if selected == "Dashboard":
     if not portfoy_only.empty:
-        # INFO BAR
-        render_kral_infobar(portfoy_only, sym)
-
+        # Dashboard genel portföy görünümü
         spot_only = portfoy_only
+
+        # Toplam değer (seçili para biriminde)
         t_v = spot_only["Değer"].sum()
         t_p = spot_only["Top. Kâr/Zarar"].sum()
-
         t_maliyet = t_v - t_p
         pct = (t_p / t_maliyet * 100) if t_maliyet != 0 else 0
 
+        # Gerçek Haftalık / Aylık / YTD KPI için tarihsel log güncelle
+        kpi_timeframe = None
+        try:
+            if GORUNUM_PB == "TRY":
+                total_try = float(t_v)
+                total_usd = float(t_v / USD_TRY) if USD_TRY else 0.0
+            else:
+                total_usd = float(t_v)
+                total_try = float(t_v * USD_TRY)
+
+            # Günlük portföy logunu yaz (aynı günse data_loader içinde atlanıyor)
+            write_portfolio_history(total_try, total_usd)
+
+            history_df = read_portfolio_history()
+            kpi_timeframe = get_timeframe_changes(history_df)
+        except Exception:
+            kpi_timeframe = None
+
+        # INFO BAR (Toplam Varlık + Son 24 Saat + Haftalık/Aylık/YTD + Sparkline)
+        render_kral_infobar(
+            spot_only,
+            sym,
+            gorunum_pb=GORUNUM_PB,
+            usd_try_rate=USD_TRY,
+            timeframe=kpi_timeframe,
+            show_sparklines=True,
+        )
+
+        # Eski 2 metric (Toplam Varlık + Genel K/Z) yine dursun
         c1, c2 = st.columns(2)
         c1.metric("Toplam Varlık", f"{sym}{t_v:,.0f}")
         c2.metric("Genel Kâr/Zarar", f"{sym}{t_p:,.0f}", delta=f"{pct:.2f}%")
