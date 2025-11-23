@@ -419,7 +419,7 @@ takip_only = master_df[master_df["Tip"] == "Takip"]
 
 # --- GLOBAL INFO BAR (Dashboard + Portföy sekmeleri için) ---
 def render_kral_infobar(df, sym):
-    if df.empty:
+    if df is None or df.empty:
         return
 
     total_value = df["Değer"].sum()
@@ -443,7 +443,7 @@ def render_kral_infobar(df, sym):
             <div class="kral-infobox">
                 <div class="kral-infobox-label">Toplam Varlık</div>
                 <span class="kral-infobox-value">{sym}{total_value:,.0f}</span>
-                <div class="kral-infobox-sub">Tüm portföy (seçili para birimi)</div>
+                <div class="kral-infobox-sub">Bu görünümdeki toplam varlık</div>
             </div>
             <div class="kral-infobox">
                 <div class="kral-infobox-label">Son 24 Saat K/Z</div>
@@ -485,7 +485,7 @@ st.markdown("---")
 # --- MENÜLER ---
 if selected == "Dashboard":
     if not portfoy_only.empty:
-        # INFO BAR (Dashboard'ta portföy geneli)
+        # INFO BAR (Dashboard'ta genel portföy)
         render_kral_infobar(portfoy_only, sym)
 
         spot_only = portfoy_only
@@ -568,14 +568,13 @@ if selected == "Dashboard":
 elif selected == "Portföy":
     st.subheader("📊 Portföy Görünümü")
 
-    # INFO BAR (Portföy sayfasında, tüm sekmeler için)
-    render_kral_infobar(portfoy_only, sym)
-
     tab_tumu, tab_bist, tab_abd, tab_fon, tab_emtia, tab_kripto, tab_nakit = st.tabs(
         ["Tümü", "BIST", "ABD", "FON", "Emtia", "Kripto", "Nakit"]
     )
 
+    # Tümü: tüm portföy
     with tab_tumu:
+        render_kral_infobar(portfoy_only, sym)
         render_pazar_tab(
             portfoy_only,
             "Tümü",
@@ -585,7 +584,10 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
+    # BIST: sadece BIST pazarı
     with tab_bist:
+        bist_df = portfoy_only[portfoy_only["Pazar"] == "BIST"]
+        render_kral_infobar(bist_df, sym)
         render_pazar_tab(
             portfoy_only,
             "BIST",
@@ -595,7 +597,10 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
+    # ABD: sadece ABD pazarı
     with tab_abd:
+        abd_df = portfoy_only[portfoy_only["Pazar"] == "ABD"]
+        render_kral_infobar(abd_df, sym)
         render_pazar_tab(
             portfoy_only,
             "ABD",
@@ -605,7 +610,10 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
+    # FON: sadece fonlar
     with tab_fon:
+        fon_df = portfoy_only[portfoy_only["Pazar"] == "FON"]
+        render_kral_infobar(fon_df, sym)
         render_pazar_tab(
             portfoy_only,
             "FON",
@@ -615,7 +623,10 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
+    # EMTIA: sadece emtialar
     with tab_emtia:
+        emtia_df = portfoy_only[portfoy_only["Pazar"] == "EMTIA"]
+        render_kral_infobar(emtia_df, sym)
         render_pazar_tab(
             portfoy_only,
             "EMTIA",
@@ -625,7 +636,10 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
+    # KRIPTO: sadece kriptolar
     with tab_kripto:
+        kripto_df = portfoy_only[portfoy_only["Pazar"] == "KRIPTO"]
+        render_kral_infobar(kripto_df, sym)
         render_pazar_tab(
             portfoy_only,
             "KRIPTO",
@@ -635,7 +649,10 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
+    # NAKIT: sadece nakitler
     with tab_nakit:
+        nakit_df = portfoy_only[portfoy_only["Pazar"] == "NAKIT"]
+        render_kral_infobar(nakit_df, sym)
         render_pazar_tab(
             portfoy_only,
             "NAKIT",
@@ -699,7 +716,7 @@ elif selected == "Ekle/Çıkar":
                         "Pazar": [pazar],
                         "Adet": [a],
                         "Maliyet": [m],
-                        "Tip": ["Portföy"],
+                        "Tip": ["Portfoy"],
                         "Notlar": [""],
                     }
                 )
