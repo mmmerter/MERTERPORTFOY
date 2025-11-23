@@ -584,9 +584,11 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
-    # BIST: sadece BIST pazarı
+    # BIST: Pazar içinde "BIST" geçenler
     with tab_bist:
-        bist_df = portfoy_only[portfoy_only["Pazar"] == "BIST"]
+        bist_df = portfoy_only[
+            portfoy_only["Pazar"].astype(str).str.contains("BIST", case=False, na=False)
+        ]
         render_kral_infobar(bist_df, sym)
         render_pazar_tab(
             portfoy_only,
@@ -597,9 +599,11 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
-    # ABD: sadece ABD pazarı
+    # ABD: Pazar içinde "ABD" geçenler
     with tab_abd:
-        abd_df = portfoy_only[portfoy_only["Pazar"] == "ABD"]
+        abd_df = portfoy_only[
+            portfoy_only["Pazar"].astype(str).str.contains("ABD", case=False, na=False)
+        ]
         render_kral_infobar(abd_df, sym)
         render_pazar_tab(
             portfoy_only,
@@ -610,9 +614,11 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
-    # FON: sadece fonlar
+    # FON: Pazar içinde "FON" geçenler
     with tab_fon:
-        fon_df = portfoy_only[portfoy_only["Pazar"] == "FON"]
+        fon_df = portfoy_only[
+            portfoy_only["Pazar"].astype(str).str.contains("FON", case=False, na=False)
+        ]
         render_kral_infobar(fon_df, sym)
         render_pazar_tab(
             portfoy_only,
@@ -623,9 +629,11 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
-    # EMTIA: sadece emtialar
+    # EMTIA: Pazar içinde "EMTIA" geçenler
     with tab_emtia:
-        emtia_df = portfoy_only[portfoy_only["Pazar"] == "EMTIA"]
+        emtia_df = portfoy_only[
+            portfoy_only["Pazar"].astype(str).str.contains("EMTIA", case=False, na=False)
+        ]
         render_kral_infobar(emtia_df, sym)
         render_pazar_tab(
             portfoy_only,
@@ -636,9 +644,11 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
-    # KRIPTO: sadece kriptolar
+    # KRIPTO: Pazar içinde "KRIPTO" geçenler
     with tab_kripto:
-        kripto_df = portfoy_only[portfoy_only["Pazar"] == "KRIPTO"]
+        kripto_df = portfoy_only[
+            portfoy_only["Pazar"].astype(str).str.contains("KRIPTO", case=False, na=False)
+        ]
         render_kral_infobar(kripto_df, sym)
         render_pazar_tab(
             portfoy_only,
@@ -649,9 +659,11 @@ elif selected == "Portföy":
             TOTAL_SPOT_DEGER,
         )
 
-    # NAKIT: sadece nakitler
+    # NAKIT: Pazar içinde "NAKIT" geçenler
     with tab_nakit:
-        nakit_df = portfoy_only[portfoy_only["Pazar"] == "NAKIT"]
+        nakit_df = portfoy_only[
+            portfoy_only["Pazar"].astype(str).str.contains("NAKIT", case=False, na=False)
+        ]
         render_kral_infobar(nakit_df, sym)
         render_pazar_tab(
             portfoy_only,
