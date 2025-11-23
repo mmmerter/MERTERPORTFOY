@@ -40,22 +40,39 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# --- CSS ---
+# --- CSS (DEĞİŞİKLİK BURADA BAŞLIYOR) ---
 st.markdown(
     """
 <style>
     .block-container {padding-top: 1rem;}
 
+    /* Base Metric Styling remains */
     div[data-testid="stMetric"] {
         background-color: #262730 !important;
         border: 1px solid #464b5f;
         border-radius: 10px;
         padding: 15px;
         color: #ffffff !important;
+        /* Default Shadow (subtle depth) */
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.4); 
+        transition: box-shadow 0.3s ease-in-out; /* Smooth transition for glow */
     }
     div[data-testid="stMetricValue"] { color: #ffffff !important; }
     div[data-testid="stMetricLabel"] { color: #bfbfbf !important; }
 
+    /* Dynamic Glow Classes (YENİ EKLENDİ) */
+    /* Target the stMetric container inside a specific custom class */
+    .metric-container-glow-pos > div > div[data-testid="stMetric"] {
+        box-shadow: 0 0 10px #00e676, 0 0 15px #00e676, 0 0 20px rgba(0, 230, 118, 0.5); /* Neon Green Glow */
+        border: 1px solid #00e676;
+    }
+    
+    .metric-container-glow-neg > div > div[data-testid="stMetric"] {
+        box-shadow: 0 0 10px #ff5252, 0 0 15px #ff5252, 0 0 20px rgba(255, 82, 82, 0.5); /* Neon Red Glow */
+        border: 1px solid #ff5252;
+    }
+
+    /* Ticker CSS remains unchanged */
     .ticker-container {
         width: 100%;
         overflow: hidden;
@@ -118,8 +135,10 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+# --- CSS SONU ---
 
-# --- HABER UI ---
+
+# --- HABER UI (UNCHANGED) ---
 def render_news_section(name, key):
     st.subheader(f"📰 {name}")
     news = get_financial_news(key)
@@ -140,7 +159,7 @@ def render_news_section(name, key):
         st.info("Haber akışı yüklenemedi.")
 
 
-# --- ANA DATA ---
+# --- ANA DATA (UNCHANGED) ---
 portfoy_df = get_data_from_sheet()
 
 c_title, c_toggle = st.columns([3, 1])
@@ -216,8 +235,9 @@ selected = option_menu(
 )
 
 
-# --- ANALİZ ---
+# --- ANALİZ (UNCHANGED) ---
 def run_analysis(df, usd_try_rate, view_currency):
+# ... (run_analysis içeriği değişmedi) ...
     results = []
 
     if df.empty:
@@ -373,7 +393,7 @@ master_df = run_analysis(portfoy_df, USD_TRY, GORUNUM_PB)
 portfoy_only = master_df[master_df["Tip"] == "Portfoy"]
 takip_only = master_df[master_df["Tip"] == "Takip"]
 
-# --- YENİ EKLENEN KISIM: VARLIK GÖRÜNÜMÜ AYARI VE TOPLAM DEĞER HESABI ---
+# --- VARLIK GÖRÜNÜMÜ AYARI VE TOPLAM DEĞER HESABI (UNCHANGED) ---
 TOTAL_SPOT_DEGER = portfoy_only[~portfoy_only["Pazar"].str.contains("VADELI", na=False)]["Değer"].sum()
 
 st.markdown("---")
@@ -400,13 +420,24 @@ if selected == "Dashboard":
         total_cost = (spot_only["Değer"] - spot_only["Top. Kâr/Zarar"]).sum()
         pct = (t_p / total_cost * 100) if total_cost != 0 else 0
 
+        # Kâr durumuna göre CSS sınıfını belirle (YENİ KISIM BURADA BAŞLIYOR)
+        glow_class = "metric-container-glow-pos" if t_p >= 0 else "metric-container-glow-neg"
+
         c1, c2 = st.columns(2)
+        
+        # --- Metric 1: Toplam Spot Varlık ---
+        c1.markdown(f'<div class="{glow_class}">', unsafe_allow_html=True)
         c1.metric("Toplam Spot Varlık", f"{sym}{t_v:,.0f}")
+        c1.markdown('</div>', unsafe_allow_html=True)
+
+        # --- Metric 2: Genel Kâr/Zarar ---
+        c2.markdown(f'<div class="{glow_class}">', unsafe_allow_html=True)
         c2.metric(
             "Genel Kâr/Zarar",
             f"{sym}{t_p:,.0f}",
             delta=f"{pct:.2f}%"
         )
+        c2.markdown('</div>', unsafe_allow_html=True)
 
         st.divider()
 
@@ -420,11 +451,11 @@ if selected == "Dashboard":
             dash_pazar, "Pazar", 
             all_tab=False,
             varlik_gorunumu=VARLIK_GORUNUMU,
-            total_spot_deger=TOTAL_SPOT_DEGER # Aslında burada gerek yok ama parametre yapısını korumak için gönderilebilir
+            total_spot_deger=TOTAL_SPOT_DEGER
         )
-
+        # ... (Rest of Dashboard logic remains) ...
         st.divider()
-        # ... (Isı haritası logic) ...
+
         c_tree_1, c_tree_2 = st.columns([3, 1])
         with c_tree_1:
             st.subheader("🗺️ Portföy Isı Haritası")
@@ -437,9 +468,14 @@ if selected == "Dashboard":
 
         color_col = "Top. %"
         spot_only = spot_only.copy()
-        spot_only["Gün. %"] = (
-            spot_only["Gün. Kâr/Zarar"] /
-            (spot_only["Değer"] - spot_only["Gün. Kâr/Zarar"])
+        spot_only["Gün. %"] = 0.0
+        
+        # Sıfıra bölünme koruması
+        safe_val = spot_only["Değer"] - spot_only["Gün. Kâr/Zarar"]
+        non_zero = safe_val != 0
+        
+        spot_only.loc[non_zero, "Gün. %"] = (
+            spot_only.loc[non_zero, "Gün. Kâr/Zarar"] / safe_val[non_zero]
         ) * 100
 
         if map_mode == "Günlük Değişim %":
