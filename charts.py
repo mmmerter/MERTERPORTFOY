@@ -103,8 +103,9 @@ def render_pie_bar_charts(
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Altında özet tablo
-    disp = grouped[[label_col, "Değer"]].copy()
+    # Altında özet tablo (BURASI FİX)
+    # Pay (%) kolonunu da alıyoruz ki KeyError olmasın
+    disp = grouped[[label_col, "Değer", "Pay (%)"]].copy()
     disp.rename(columns={label_col: group_col}, inplace=True)
     disp["Pay (%)"] = disp["Pay (%)"].round(2)
     st.dataframe(styled_dataframe(disp), use_container_width=True, hide_index=True)
