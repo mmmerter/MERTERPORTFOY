@@ -234,7 +234,7 @@ selected = option_menu(
 )
 
 
-# --- ANALİZ (SEKTÖR VERİSİ GERİ EKLENDİ) ---
+# --- ANALİZ (SEKTÖR VERİSİ EKLENDİ) ---
 def run_analysis(df, usd_try_rate, view_currency):
     results = []
 
@@ -259,7 +259,7 @@ def run_analysis(df, usd_try_rate, view_currency):
 
         symbol = get_yahoo_symbol(kod, pazar)
 
-        # --- SEKTÖR VERİSİ ÇEKME BAŞLANGIÇ (GERİ YÜKLENDİ) ---
+        # --- SEKTÖR VERİSİ ÇEKME BAŞLANGIÇ ---
         sector = ""
         if "BIST" in pazar or "ABD" in pazar:
             try:
@@ -399,7 +399,7 @@ def run_analysis(df, usd_try_rate, view_currency):
                 "Top. %": pnl_pct,
                 "Gün. Kâr/Zarar": d_g,
                 "Notlar": row.get("Notlar", ""),
-                "Sektör": sector, # GERİ YÜKLENDİ
+                "Sektör": sector, # YENİ SÜTUN
             }
         )
 
@@ -468,11 +468,13 @@ if selected == "Dashboard":
 
         st.divider()
 
-        # --- YENİ EKLENEN SEKTÖR DAĞILIMI (KALDIRILMIŞTI) ---
-        # Sektör verisi artık var, dashboard'a tekrar ekleyelim
+        # --- YENİ EKLENEN SEKTÖR DAĞILIMI ---
         st.subheader("📊 Sektörlere Göre Dağılım (Tüm Spot)")
         
+        # Sadece sektör bilgisi olan varlıkları kullan (Stocks, Funds, Nakit)
         dash_sector_data = spot_only[spot_only["Sektör"] != ""].copy()
+        
+        # Sector bazında grupla
         dash_sector_grouped = dash_sector_data.groupby("Sektör", as_index=False).agg({"Değer": "sum", "Top. Kâr/Zarar": "sum"})
         
         render_pie_bar_charts(
