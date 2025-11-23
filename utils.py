@@ -1,14 +1,9 @@
 import re
 import pandas as pd
-import streamlit as st
-
-from st_aggrid import AgGrid, GridOptionsBuilder
-from st_aggrid.shared import JsCode
 
 ANALYSIS_COLS = [
     "Kod",
     "Pazar",
-    "Sektör",
     "Tip",
     "Adet",
     "Maliyet",
@@ -18,6 +13,7 @@ ANALYSIS_COLS = [
     "Top. Kâr/Zarar",
     "Top. %",
     "Gün. Kâr/Zarar",
+    "Sektör",   # 👈 yeni kolon
     "Notlar",
 ]
 
@@ -113,86 +109,18 @@ def smart_parse(text_val):
         return 0.0
 
 
-# DataFrame stil fonksiyonu (şimdilik basit, istersen geliştiririz)
 def styled_dataframe(df: pd.DataFrame):
+    """Dataframe için basit formatlama."""
     if df.empty:
         return df
-    return df
 
+    format_dict = {}
+    for col in df.columns:
+        if df[col].dtype in ["float64", "float32", "int64", "int32"]:
+            format_dict[col] = "{:,.2f}"
 
-# --- AGGRID TABLO RENDERER ---
-def render_table(df: pd.DataFrame, height: int = 420):
-    """
-    Tüm sekmelerde tablo gösterimi:
-    - Büyük ve kalın font
-    - Kâr/Zarar kolonlarında pozitif yeşil, negatif kırmızı
-    """
-    if df.empty:
-        st.info("Veri yok.")
-        return
-
-    gb = GridOptionsBuilder.from_dataframe(df)
-
-    # Varsayılan kolon davranışı
-    gb.configure_default_column(
-        resizable=True,
-        filter=True,
-        sortable=True,
-    )
-
-    # Sayısal kolonlar için sağ hizalama
-    num_cols = [
-        col
-        for col in df.columns
-        if df[col].dtype in ["float64", "float32", "int64", "int32"]
-    ]
-    for col in num_cols:
-        gb.configure_column(col, type=["numericColumn", "rightAligned"])
-
-    # Kâr / Zarar kolonları için JS bazlı renk fonksiyonu
-    pnl_style = JsCode(
-        """
-        function(params) {
-            if (params.value === null || params.value === undefined || params.value === '') {
-                return {'color': '#cccccc', 'font-weight': 'bold'};
-            }
-            let v = Number(params.value);
-            if (isNaN(v)) {
-                return {'color': '#cccccc', 'font-weight': 'bold'};
-            }
-            if (v > 0) {
-                return {'color': '#00e676', 'font-weight': 'bold'};
-            } else if (v < 0) {
-                return {'color': '#ff5252', 'font-weight': 'bold'};
-            } else {
-                return {'color': '#cccccc', 'font-weight': 'bold'};
-            }
-        }
-        """
-    )
-
-    pnl_cols = [
-        "Top. Kâr/Zarar",
-        "Top. %",
-        "Gün. Kâr/Zarar",
-        "Kâr/Zarar",  # Satışlar sekmesi için
-    ]
-    for col in pnl_cols:
-        if col in df.columns:
-            gb.configure_column(col, cellStyle=pnl_style)
-
-    # Satır yüksekliği + genel grid ayarları
-    gb.configure_grid_options(
-        rowHeight=32,
-    )
-
-    grid_options = gb.build()
-
-    AgGrid(
-        df,
-        gridOptions=grid_options,
-        theme="streamlit",
-        height=height,
-        fit_columns_on_grid_load=True,
-        enable_enterprise_modules=False,
-    )
+    try:
+        return df.style.format(format_dict)
+    except Exception:
+        # Bir sorun olursa normal df dön
+        return df
