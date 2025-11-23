@@ -4,26 +4,28 @@ import plotly.graph_objects as go
 import yfinance as yf
 import pandas as pd
 
-from utils import styled_dataframe, render_table
+from utils import styled_dataframe
 from data_loader import get_tefas_data
 
 
-def render_pie_bar_charts(df: pd.DataFrame, group_col: str, all_tab: bool = False):
+def render_pie_bar_charts(df: pd.DataFrame, group_col: str):
     """Pastayı ve bar chart'ı tek yerden üretir."""
     if df.empty or "Değer" not in df.columns:
         return
 
-    c_p, c_b = st.columns([3, 2])
+    c_p, c_b = st.columns(2)
 
+    # Pasta: yüzdelik dağılım
     pie_fig = px.pie(
         df,
         values="Değer",
         names=group_col,
-        hole=0.45,
+        hole=0.4,
     )
-    pie_fig.update_traces(textposition="inside", textinfo="percent+label")
+    pie_fig.update_traces(textfont=dict(size=16))
     c_p.plotly_chart(pie_fig, use_container_width=True)
 
+    # Bar: kâr/zarar renklendirmeli
     if "Top. Kâr/Zarar" in df.columns:
         bar_fig = px.bar(
             df.sort_values("Değer"),
@@ -37,44 +39,14 @@ def render_pie_bar_charts(df: pd.DataFrame, group_col: str, all_tab: bool = Fals
             x=group_col,
             y="Değer",
         )
+    bar_fig.update_layout(xaxis_tickfont=dict(size=14), yaxis_tickfont=dict(size=14))
     c_b.plotly_chart(bar_fig, use_container_width=True)
-
-
-def render_sector_pie(df: pd.DataFrame):
-    """
-    Sektörlere göre dağılım pastası.
-    Hesaplamalardaki matematiğe dokunmadan sadece "Değer" üzerinden gruplanır.
-    """
-    if df.empty or "Değer" not in df.columns or "Sektör" not in df.columns:
-        return
-
-    sec = df.copy()
-    sec["Sektör"] = sec["Sektör"].fillna("").replace("", "Diğer")
-
-    grouped = sec.groupby("Sektör", as_index=False)["Değer"].sum()
-    if grouped.empty:
-        return
-
-    fig = px.pie(
-        grouped,
-        values="Değer",
-        names="Sektör",
-        hole=0.5,
-    )
-    fig.update_traces(textposition="inside", textinfo="percent+label")
-    fig.update_layout(
-        title="Sektörlere Göre Dağılım",
-        margin=dict(l=0, r=0, t=40, b=0),
-        legend_title="Sektör",
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
 
 
 def get_historical_chart(df_portfolio: pd.DataFrame, usd_try: float):
     """
     Şimdilik stub: Hata vermemesi için None dönüyor.
-    KRAL'da da böyleydi, aynen koruyoruz.
+    Eski KRAL'da da böyleydi.
     """
     return None
 
@@ -106,13 +78,27 @@ def render_pazar_tab(df, filter_key, symb, usd_try):
     st.divider()
 
     if filter_key != "VADELI":
-        # Sekmeye göre (BIST, ABD, FON vb.) varlık bazlı grafik
+        # 1) BIST / ABD / FON sekmeleri için SEKTÖR pastası
+        if "Sektör" in sub.columns and filter_key in ["BIST", "ABD", "FON"]:
+            st.subheader("🏭 Sektörlere Göre Dağılım")
+            sec_df = sub.copy()
+            sec_df = sec_df[
+                sec_df["Sektör"].notna()
+                & (sec_df["Sektör"] != "")
+            ]
+            if not sec_df.empty:
+                sec_group = (
+                    sec_df.groupby("Sektör", as_index=False)
+                    .agg({"Değer": "sum"})
+                )
+                render_pie_bar_charts(sec_group, "Sektör")
+            st.divider()
+
+        # 2) Her sekmede varlık bazlı grafik
+        st.subheader("📊 Varlık Bazlı Dağılım")
         render_pie_bar_charts(sub, "Kod")
 
-        # Sektörlere göre dağılım (Emtia / Kripto / Vadeli hariç)
-        if filter_key not in ["EMTIA", "KRIPTO", "VADELI"]:
-            render_sector_pie(sub)
-
+        # 3) (Opsiyonel) tarihsel grafik
         if filter_key not in ["FON", "EMTIA", "NAKIT"]:
             try:
                 h = get_historical_chart(sub, usd_try)
@@ -121,8 +107,11 @@ def render_pazar_tab(df, filter_key, symb, usd_try):
             except Exception:
                 st.warning("Tarihsel grafik yüklenemedi.")
 
-    # Tablo
-    render_table(sub)
+    st.dataframe(
+        styled_dataframe(sub),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def render_detail_view(symbol, pazar):
