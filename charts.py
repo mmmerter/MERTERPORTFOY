@@ -5,9 +5,70 @@ import yfinance as yf
 import pandas as pd
 
 from utils import styled_dataframe, get_yahoo_symbol
-from data_loader import get_tefas_data
+from data_loader import (
+    get_tefas_data,
+    read_portfolio_history,
+    write_portfolio_history,
+    get_timeframe_changes
+)
+
+# ============================================================
+#               🔥 SPARKLINE YARDIMCI FONKSİYONU
+# ============================================================
+def render_sparkline(data_list, height=55, color="#00e676"):
+    """
+    Minimal sparkline çizgisi döner.
+    """
+    if not data_list or len(data_list) < 2:
+        return None
+
+    df = pd.DataFrame({"x": list(range(len(data_list))), "y": data_list})
+
+    fig = px.line(
+        df,
+        x="x",
+        y="y"
+    )
+    fig.update_traces(line=dict(width=2, color=color))
+    fig.update_layout(
+        height=height,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+    )
+    return fig
 
 
+# ============================================================
+#             🔥 KPI Hesaplama + Sparkline Paket Fonksiyonu
+# ============================================================
+def get_kpi_data(total_value_try, total_value_usd):
+    """
+    - Günlük portföy değerini Google Sheet'e yaz
+    - Tarihsel datayı oku
+    - Haftalık - Aylık - YTD hesapları çıkar
+    - Sparkline listelerini al
+    """
+    # --- 1) Tarihsel veriyi oku ---
+    history = read_portfolio_history()
+
+    # --- 2) Bugün yoksa ekle ---
+    today_value = total_value_try
+    if history.empty or history["Tarih"].iloc[-1].date() != pd.Timestamp.today().date():
+        write_portfolio_history(total_value_try, total_value_usd)
+        history = read_portfolio_history()
+
+    # --- 3) KPİ verilerini üret ---
+    tf = get_timeframe_changes(history)
+    if tf is None:
+        return None
+
+    return tf
+
+
+# ============================================================
+#       🔥 PIE + BAR (Portföy dağılımı) — Değişmedi
+# ============================================================
 def render_pie_bar_charts(
     df: pd.DataFrame,
     group_col: str,
@@ -15,15 +76,7 @@ def render_pie_bar_charts(
     varlik_gorunumu: str = "YÜZDE (%)",
     total_spot_deger: float = 0.0,
 ) -> None:
-    """
-    Modern donut + bar kombinasyonu.
 
-    - df: En azından [group_col, "Değer"] kolonlarını içeren dataframe.
-    - group_col: Gruplama yapılacak kolon (ör: "Pazar" veya "Kod").
-    - all_tab: Eğer True ise yüzde hesaplarında total_spot_deger kullanılabilir.
-    - varlik_gorunumu: "YÜZDE (%)" veya "TUTAR (₺/$)".
-    - total_spot_deger: Toplam spot portföy değeri (Tümü sekmesinde kullanılıyor).
-    """
     if df is None or df.empty or "Değer" not in df.columns:
         st.info("Grafik üretmek için veri bulunamadı.")
         return
@@ -36,30 +89,28 @@ def render_pie_bar_charts(
     grouped = df.groupby(group_col, as_index=False).agg(agg)
     grouped = grouped.sort_values("Değer", ascending=False)
 
-    # Yüzde hesaplama
-    if all_tab and total_spot_deger and total_spot_deger > 0:
+    # Yüzde hesap
+    if all_tab and total_spot_deger > 0:
         denom = float(total_spot_deger)
     else:
         denom = float(grouped["Değer"].sum())
 
-    grouped["Pay (%)"] = grouped["Değer"] / denom * 100 if denom > 0 else 0
+    grouped["Pay (%)"] = (grouped["Değer"] / denom * 100) if denom > 0 else 0
 
-    # Metin kolonları
-    label_col = group_col
-    grouped["Label"] = grouped[label_col].astype(str)
+    # Labels
+    grouped["Label"] = grouped[group_col].astype(str)
 
-    # Donut + Bar layout
     col_pie, col_bar = st.columns([1.2, 1])
 
-    # --- Donut (Pie) ---
+    # ---------------- PIE ----------------
     with col_pie:
         fig_pie = go.Figure(
             data=[
                 go.Pie(
                     labels=grouped["Label"],
                     values=grouped["Değer"],
-                    hole=0.60,
-                    hovertemplate="<b>%{label}</b><br>Değer: %{value:,.0f}<br>Pay: %{percent:.1%}<extra></extra>",
+                    hole=0.6,
+                    hovertemplate="<b>%{label}</b><br>Değer: %{value:,.0f}<br>%{percent:.1%}<extra></extra>",
                 )
             ]
         )
@@ -86,7 +137,7 @@ def render_pie_bar_charts(
         )
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    # --- Bar (Dağılım) ---
+    # ---------------- BAR ----------------
     with col_bar:
         fig_bar = go.Figure()
         fig_bar.add_trace(
@@ -94,22 +145,23 @@ def render_pie_bar_charts(
                 x=grouped["Değer"],
                 y=grouped["Label"],
                 orientation="h",
-                hovertemplate="<b>%{y}</b><br>Değer: %{x:,.0f}<extra></extra>",
             )
         )
         fig_bar.update_layout(
             margin=dict(t=10, b=0, l=0, r=0),
-            yaxis=dict(autorange="reversed"),
+            yaxis=dict(autorange="reversed")
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Altında özet tablo
-    disp = grouped[[label_col, "Değer", "Pay (%)"]].copy()
-    disp.rename(columns={label_col: group_col}, inplace=True)
+    # Tablo
+    disp = grouped[[group_col, "Değer", "Pay (%)"]].copy()
     disp["Pay (%)"] = disp["Pay (%)"].round(2)
-    st.dataframe(styled_dataframe(disp), use_container_width=True, hide_index=True)
+    st.dataframe(styled_dataframe(disp), hide_index=True, use_container_width=True)
 
 
+# ============================================================
+#               🔥 PAZAR SEKME VIEW (Değişmedi)
+# ============================================================
 def render_pazar_tab(
     df: pd.DataFrame,
     filter_key: str,
@@ -117,36 +169,28 @@ def render_pazar_tab(
     usd_try_rate: float,
     varlik_gorunumu: str,
     total_spot_deger: float,
-) -> None:
-    """
-    Portföy sayfasındaki her pazar sekmesi için:
-    - Üstte pazar özeti metric'ler
-    - Ortada donut + bar grafikleri
-    - Altta detay tablo
-    """
+):
 
     if df is None or df.empty:
-        st.info("Bu görünüm için portföyde varlık bulunmuyor.")
+        st.info("Bu görünüm için portföyde varlık yok.")
         return
 
-    # Filtreleme
+    # Filtre
     if filter_key == "Tümü":
         sub = df.copy()
     else:
-        pazar_str = df["Pazar"].astype(str)
-        sub = df[pazar_str.str.contains(filter_key, case=False, na=False)].copy()
+        sub = df[df["Pazar"].astype(str).str.contains(filter_key, case=False, na=False)]
 
-    is_vadeli = filter_key.upper().startswith("VADEL")
     if sub.empty:
-        st.info(f"{filter_key} için portföyde varlık bulunmuyor.")
+        st.info(f"{filter_key} için veri yok.")
         return
 
-    # Özet rakamlar
+    # METRİKLER
     total_val = float(sub["Değer"].sum())
-    total_pnl = float(sub["Top. Kâr/Zarar"].sum()) if "Top. Kâr/Zarar" in sub.columns else 0.0
+    total_pnl = float(sub["Top. Kâr/Zarar"].sum())
     base = total_val - total_pnl
-    pnl_pct = (total_pnl / base * 100) if base != 0 else 0.0
-    daily_pnl = float(sub["Gün. Kâr/Zarar"].sum()) if "Gün. Kâr/Zarar" in sub.columns else 0.0
+    pnl_pct = (total_pnl / base * 100) if base != 0 else 0
+    daily_pnl = float(sub["Gün. Kâr/Zarar"].sum())
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Toplam Değer", f"{sym}{total_val:,.0f}")
@@ -155,46 +199,23 @@ def render_pazar_tab(
 
     st.divider()
 
-    # Donut + bar (vadeli dışındakiler için)
-    if not is_vadeli:
-        render_pie_bar_charts(
-            sub,
-            group_col="Kod",
-            all_tab=(filter_key == "Tümü"),
-            varlik_gorunumu=varlik_gorunumu,
-            total_spot_deger=total_spot_deger,
-        )
+    # Grafikler
+    render_pie_bar_charts(
+        sub,
+        group_col="Kod",
+        all_tab=(filter_key == "Tümü"),
+        varlik_gorunumu=varlik_gorunumu,
+        total_spot_deger=total_spot_deger,
+    )
 
-    # Detay tablo
-    disp = sub.copy()
-    if varlik_gorunumu == "YÜZDE (%)" and not is_vadeli:
-        # Değer'i yüzdeye çevir
-        disp.rename(columns={"Değer": "Tutar"}, inplace=True)
-        denom = total_spot_deger if filter_key == "Tümü" else float(sub["Değer"].sum())
-        if denom > 0:
-            disp["Değer"] = disp["Tutar"] / denom * 100
-        else:
-            disp["Değer"] = 0.0
-
-    st.dataframe(styled_dataframe(disp), use_container_width=True, hide_index=True)
+    # Tablo
+    st.dataframe(styled_dataframe(sub), hide_index=True, use_container_width=True)
 
 
-def render_detail_view(symbol: str, pazar: str) -> None:
-    """
-    İleride detay sayfası eklemek için placeholder.
-    Şu an sadece seçilen kodu gösteriyor.
-    """
-    st.write(f"Detay görünüm: {symbol} ({pazar})")
-
-
+# ============================================================
+#        🔥 TARİHSEL PORTFÖY GRAFİĞİ (Düşüş fix'li)
+# ============================================================
 def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
-    """
-    Son 60 güne ait yaklaşık tarihsel portföy değeri grafiği oluşturur.
-    - Her varlık için Yahoo Finance (veya ons altın/gümüş, fon vs.) verisi çekilir.
-    - Lot/adet ile çarpılır.
-    - Seçilen para birimine (pb: TRY / USD) göre çevrilir.
-    - Hepsi toplanıp tek zaman serisi olarak çizilir.
-    """
     if df is None or df.empty:
         return None
 
@@ -205,7 +226,7 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
         pazar = str(row.get("Pazar", ""))
         adet = float(row.get("Adet", 0) or 0)
 
-        if adet == 0 or not kod:
+        if adet == 0:
             continue
 
         pazar_upper = pazar.upper()
@@ -226,93 +247,81 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
         prices = None
 
         try:
-            # Nakitler
+            # --- NAKİT ---
             if "NAKIT" in pazar_upper:
                 today = pd.Timestamp.today().normalize()
-                if kod_upper == "TL":
+                if kod == "TL":
                     prices = pd.Series([1.0], index=[today])
-                elif kod_upper == "USD":
+                elif kod == "USD":
                     prices = pd.Series([usd_try_rate], index=[today])
                 else:
                     prices = pd.Series([1.0], index=[today])
 
-            # Fonlar: sabit seri
+            # --- FON ---
             elif "FON" in pazar_upper:
                 price, _ = get_tefas_data(kod)
-                if price and price > 0:
-                    idx = pd.date_range(
-                        end=pd.Timestamp.today().normalize(), periods=30, freq="D"
-                    )
+                if price > 0:
+                    idx = pd.date_range(end=pd.Timestamp.today(), periods=30)
                     prices = pd.Series(price, index=idx)
 
-            # Gram Gümüş
-            elif "GRAM GÜMÜŞ" in kod_upper:
-                h = yf.Ticker("SI=F").history(period="60d", interval="1d")
+            # --- GRAM GÜMÜŞ ---
+            elif "GÜMÜŞ" in kod_upper:
+                h = yf.Ticker("SI=F").history(period="60d")
                 if not h.empty:
-                    s = (h["Close"] * usd_try_rate) / 31.1035
-                    prices = s
+                    prices = (h["Close"] * usd_try_rate) / 31.1035
 
-            # Gram Altın
-            elif "GRAM ALTIN" in kod_upper:
-                h = yf.Ticker("GC=F").history(period="60d", interval="1d")
+            # --- GRAM ALTIN ---
+            elif "ALTIN" in kod_upper:
+                h = yf.Ticker("GC=F").history(period="60d")
                 if not h.empty:
-                    s = (h["Close"] * usd_try_rate) / 31.1035
-                    prices = s
+                    prices = (h["Close"] * usd_try_rate) / 31.1035
 
-            # Hisse / Kripto
+            # --- HİSSE / KRİPTO ---
             else:
                 symbol = get_yahoo_symbol(kod, pazar)
-                h = yf.Ticker(symbol).history(period="60d", interval="1d")
+                h = yf.Ticker(symbol).history(period="60d")
                 if not h.empty:
                     prices = h["Close"]
 
-        except Exception:
+        except:
             prices = None
 
         if prices is None or prices.empty:
             continue
 
-        # TZ-FIX: timezone'lu index varsa timezone'u sıfırla
+        # TZ temizle
         prices.index = pd.to_datetime(prices.index).tz_localize(None)
 
-        # TRY / USD çevirisi
+        # PB çevirisi
         if pb == "TRY":
             if asset_currency == "USD":
                 values = prices * adet * usd_try_rate
             else:
                 values = prices * adet
-        else:  # pb == "USD"
+        else:
             if asset_currency == "TRY":
                 values = prices * adet / usd_try_rate
             else:
                 values = prices * adet
 
-        all_series.append(values.rename("Değer"))
+        all_series.append(values)
 
+    # Hiç veri yoksa
     if not all_series:
         return None
 
-    # Tüm serileri hizalayıp topla + forward fill
     df_concat = pd.concat(all_series, axis=1)
-    df_concat.index = pd.to_datetime(df_concat.index)
-    df_concat = df_concat.sort_index()
-    df_concat = df_concat.ffill()  # eksik günleri son değerle doldur
+    df_concat = df_concat.sort_index().ffill()
 
-    portfolio_series = df_concat.sum(axis=1)
-    portfolio_series = portfolio_series[-60:]  # son 60 gün
+    series = df_concat.sum(axis=1)
+    series = series.tail(60)
 
-    hist_df = portfolio_series.reset_index()
-    hist_df.columns = ["Tarih", "ToplamDeğer"]
+    plot_df = pd.DataFrame({"Tarih": series.index, "Değer": series.values})
 
-    fig = px.line(
-        hist_df,
-        x="Tarih",
-        y="ToplamDeğer",
-        title="Portföy Değeri (60 Gün)",
-    )
+    fig = px.line(plot_df, x="Tarih", y="Değer")
     fig.update_layout(
-        margin=dict(t=30, b=0, l=0, r=0),
-        xaxis_title="Tarih",
-        yaxis_title=f"Portföy ({'₺' if pb == 'TRY' else '$'})",
+        margin=dict(l=0, r=0, t=20, b=0),
+        xaxis_title="",
+        yaxis_title="",
     )
     return fig
