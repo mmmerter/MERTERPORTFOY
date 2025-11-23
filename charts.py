@@ -4,38 +4,100 @@ import plotly.graph_objects as go
 import yfinance as yf
 import pandas as pd
 
-from utils import render_table
+from utils import styled_dataframe
 from data_loader import get_tefas_data
 
 
-def render_pie_bar_charts(df: pd.DataFrame, group_col: str):
+def _prepare_pie_df(df: pd.DataFrame, group_col: str, threshold: float | None):
+    """
+    threshold:
+        None  -> hiçbirini 'Diğer' yapma
+        0.01  -> %1 altını Diğer
+        0.05  -> %5 altını Diğer
+    """
+    if df.empty or "Değer" not in df.columns or threshold is None:
+        return df
+
+    tmp = df.copy()
+    total = tmp["Değer"].sum()
+    if total <= 0:
+        return df
+
+    tmp["__pay"] = tmp["Değer"] / total
+    tmp[group_col] = tmp.apply(
+        lambda r: "Diğer" if r["__pay"] < threshold else r[group_col], axis=1
+    )
+    # aynı isimleri grupla
+    agg_cols = {c: "sum" for c in tmp.columns if c not in [group_col, "__pay"]}
+    agg_cols["__pay"] = "sum"
+    grouped = tmp.groupby(group_col, as_index=False).agg(agg_cols)
+    grouped = grouped.drop(columns="__pay", errors="ignore")
+    return grouped
+
+
+def render_pie_bar_charts(
+    df: pd.DataFrame,
+    group_col: str,
+    threshold: float | None = 0.01,
+):
     """Pastayı ve bar chart'ı tek yerden üretir."""
     if df.empty or "Değer" not in df.columns:
         return
 
-    c_p, c_b = st.columns(2)
+    df_plot = _prepare_pie_df(df, group_col, threshold)
 
+    c_p, c_b = st.columns([1.2, 1])
+
+    # --- PİE ---
     pie_fig = px.pie(
-        df,
+        df_plot,
         values="Değer",
         names=group_col,
-        hole=0.4,
+        hole=0.35,
+    )
+    pie_fig.update_traces(
+        textinfo="label+percent",
+        textposition="outside",
+        textfont=dict(size=14, family="Arial Black"),
+        pull=[0.03] * len(df_plot),
+    )
+    pie_fig.update_layout(
+        height=430,
+        margin=dict(t=40, b=80, l=0, r=0),
+        legend=dict(font=dict(size=12)),
     )
     c_p.plotly_chart(pie_fig, use_container_width=True)
 
-    if "Top. Kâr/Zarar" in df.columns:
+    # --- BAR ---
+    if "Top. Kâr/Zarar" in df_plot.columns:
         bar_fig = px.bar(
-            df.sort_values("Değer"),
+            df_plot.sort_values("Değer"),
             x=group_col,
             y="Değer",
             color="Top. Kâr/Zarar",
+            color_continuous_scale="Blues",
         )
     else:
         bar_fig = px.bar(
-            df.sort_values("Değer"),
+            df_plot.sort_values("Değer"),
             x=group_col,
             y="Değer",
         )
+
+    bar_fig.update_layout(
+        height=430,
+        margin=dict(t=40, b=80, l=40, r=40),
+        xaxis=dict(
+            title="",
+            tickfont=dict(size=11),
+        ),
+        yaxis=dict(
+            title="Değer",
+            title_font=dict(size=12),
+            tickfont=dict(size=11),
+        ),
+        legend=dict(font=dict(size=11)),
+    )
     c_b.plotly_chart(bar_fig, use_container_width=True)
 
 
@@ -65,17 +127,24 @@ def render_pazar_tab(df, filter_key, symb, usd_try):
     c1, c2 = st.columns(2)
     lbl = "Toplam PNL" if filter_key == "VADELI" else "Toplam Varlık"
     c1.metric(lbl, f"{symb}{t_val:,.0f}")
-    c2.metric(
-        "Toplam Kâr/Zarar",
-        f"{symb}{t_pl:,.0f}",
-        delta=f"{t_pl:,.0f}",
-    )
+
+    if filter_key == "VADELI":
+        # maliyet bilgisi olmadığı için yüzde hesaplamıyoruz
+        c2.metric("Toplam Kâr/Zarar", f"{symb}{t_pl:,.0f}")
+    else:
+        invested = t_val - t_pl
+        pct = (t_pl / invested * 100) if invested > 0 else 0.0
+        c2.metric(
+            "Toplam Kâr/Zarar",
+            f"{symb}{t_pl:,.0f}",
+            delta=f"%{pct:.2f}",
+        )
 
     st.divider()
 
     if filter_key != "VADELI":
         # Sekmeye göre (BIST, ABD, FON vb.) varlık bazlı grafik
-        render_pie_bar_charts(sub, "Kod")
+        render_pie_bar_charts(sub, "Kod", threshold=0.01)
 
         if filter_key not in ["FON", "EMTIA", "NAKIT"]:
             try:
@@ -85,8 +154,11 @@ def render_pazar_tab(df, filter_key, symb, usd_try):
             except Exception:
                 st.warning("Tarihsel grafik yüklenemedi.")
 
-    # BURADA AGGRID YOK – kendi HTML tablomuz:
-    render_table(sub)
+    st.dataframe(
+        styled_dataframe(sub),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def render_detail_view(symbol, pazar):
