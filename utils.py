@@ -125,13 +125,13 @@ def styled_dataframe(df: pd.DataFrame):
 
     styler = df.style.format(format_dict)
 
-    # Genel font boyutu & kalınlık
+    # Genel font boyutu & kalınlık (DEĞİŞİKLİK BURADA YAPILDI)
     styler = styler.set_table_styles(
         [
             {
                 "selector": "th",
                 "props": [
-                    ("font-size", "15px"),
+                    ("font-size", "17px"),  # Başlık (Header) font boyutu büyütüldü
                     ("font-weight", "bold"),
                     ("text-align", "center"),
                 ],
@@ -139,7 +139,7 @@ def styled_dataframe(df: pd.DataFrame):
             {
                 "selector": "td",
                 "props": [
-                    ("font-size", "14px"),
+                    ("font-size", "16px"),  # Hücre (Cell) font boyutu büyütüldü
                     ("font-weight", "bold"),
                 ],
             },
