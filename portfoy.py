@@ -157,7 +157,7 @@ portfoy_df = get_data_from_sheet()
 
 c_title, c_toggle = st.columns([3, 1])
 with c_title:
-    st.title("🏦 Merter'in DEVASA VARLIK Yönetim Terminali")
+    st.title("🏦 Merter Portföy Takip Botu")
 with c_toggle:
     st.write("")
     GORUNUM_PB = st.radio("Para Birimi:", ["TRY", "USD"], horizontal=True)
@@ -437,4 +437,5 @@ elif selected == "Ekle/Çıkar":
                 st.success("Silindi!")
                 time.sleep(1)
                 st.rerun()
+
 
