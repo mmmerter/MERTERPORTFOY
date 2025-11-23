@@ -8,105 +8,42 @@ from utils import render_table
 from data_loader import get_tefas_data
 
 
-def render_pie_bar_charts(df: pd.DataFrame, group_col: str, all_tab: bool = False):
+def render_pie_bar_charts(df: pd.DataFrame, group_col: str):
     """Pastayı ve bar chart'ı tek yerden üretir."""
     if df.empty or "Değer" not in df.columns:
         return
 
-    # Gruplama
-    agg_cols = {"Değer": "sum"}
-    has_pnl = "Top. Kâr/Zarar" in df.columns
-    if has_pnl:
-        agg_cols["Top. Kâr/Zarar"] = "sum"
-
-    grouped = df.groupby(group_col, as_index=False).agg(agg_cols)
-    total_val = grouped["Değer"].sum()
-
-    if total_val <= 0:
-        plot_df = grouped.copy()
-    else:
-        grouped["_pct"] = grouped["Değer"] / total_val * 100
-        major = grouped[grouped["_pct"] >= 1].copy()
-        minor = grouped[grouped["_pct"] < 1].copy()
-
-        if not minor.empty and not major.empty:
-            other_row = {
-                group_col: "Diğer",
-                "Değer": minor["Değer"].sum(),
-            }
-            if has_pnl:
-                other_row["Top. Kâr/Zarar"] = minor["Top. Kâr/Zarar"].sum()
-            major = pd.concat([major, pd.DataFrame([other_row])], ignore_index=True)
-            plot_df = major.drop(columns=["_pct"], errors="ignore")
-        else:
-            plot_df = grouped.drop(columns=["_pct"], errors="ignore")
-
-    total_plot_val = plot_df["Değer"].sum()
-    if total_plot_val > 0:
-        plot_df["_pct"] = plot_df["Değer"] / total_plot_val * 100
-    else:
-        plot_df["_pct"] = 0
-
-    threshold = 5.0 if all_tab else 0.0
-
-    texts = []
-    for _, r in plot_df.iterrows():
-        if r["_pct"] >= threshold:
-            texts.append(f"{r[group_col]} {r['_pct']:.1f}%")
-        else:
-            texts.append("")
-
-    c_pie, c_bar = st.columns([4, 3])
+    c_p, c_b = st.columns(2)
 
     pie_fig = px.pie(
-        plot_df,
+        df,
         values="Değer",
         names=group_col,
-        hole=0.40,
+        hole=0.4,
     )
-    pie_fig.update_traces(
-        text=texts,
-        textinfo="text",
-        textfont=dict(size=18, color="white", family="Arial Black"),
-    )
-    pie_fig.update_layout(
-        legend=dict(font=dict(size=14)),
-        margin=dict(t=40, l=0, r=0, b=80),
-    )
-    c_pie.plotly_chart(pie_fig, use_container_width=True)
+    c_p.plotly_chart(pie_fig, use_container_width=True)
 
-    if has_pnl:
+    if "Top. Kâr/Zarar" in df.columns:
         bar_fig = px.bar(
-            plot_df.sort_values("Değer"),
+            df.sort_values("Değer"),
             x=group_col,
             y="Değer",
             color="Top. Kâr/Zarar",
-            text="Değer",
         )
     else:
         bar_fig = px.bar(
-            plot_df.sort_values("Değer"),
+            df.sort_values("Değer"),
             x=group_col,
             y="Değer",
-            text="Değer",
         )
-
-    bar_fig.update_traces(
-        texttemplate="%{text:,.0f}",
-        textposition="outside",
-        textfont=dict(size=14, color="white", family="Arial Black"),
-    )
-    bar_fig.update_layout(
-        xaxis=dict(tickfont=dict(size=14)),
-        yaxis=dict(tickfont=dict(size=14)),
-        legend=dict(font=dict(size=14)),
-        margin=dict(t=40, l=20, r=20, b=40),
-    )
-    c_bar.plotly_chart(bar_fig, use_container_width=True)
+    c_b.plotly_chart(bar_fig, use_container_width=True)
 
 
 def get_historical_chart(df_portfolio: pd.DataFrame, usd_try: float):
-    """Şimdilik stub: KRAL’da da yoktu."""
+    """
+    Şimdilik stub: Hata vermemesi için None dönüyor.
+    KRAL'da da böyleydi, aynen koruyoruz.
+    """
     return None
 
 
@@ -128,28 +65,27 @@ def render_pazar_tab(df, filter_key, symb, usd_try):
     c1, c2 = st.columns(2)
     lbl = "Toplam PNL" if filter_key == "VADELI" else "Toplam Varlık"
     c1.metric(lbl, f"{symb}{t_val:,.0f}")
-
-    if filter_key == "VADELI":
-        c2.metric(
-            "Toplam Kâr/Zarar",
-            f"{symb}{t_pl:,.0f}",
-            delta=f"{symb}{t_pl:,.0f}",
-        )
-    else:
-        total_cost = (sub["Değer"] - sub["Top. Kâr/Zarar"]).sum()
-        pct = (t_pl / total_cost * 100) if total_cost != 0 else 0
-        c2.metric(
-            "Toplam Kâr/Zarar",
-            f"{symb}{t_pl:,.0f}",
-            delta=f"{pct:.2f}%",
-        )
+    c2.metric(
+        "Toplam Kâr/Zarar",
+        f"{symb}{t_pl:,.0f}",
+        delta=f"{t_pl:,.0f}",
+    )
 
     st.divider()
 
     if filter_key != "VADELI":
-        render_pie_bar_charts(sub, "Kod", all_tab=False)
+        # Sekmeye göre (BIST, ABD, FON vb.) varlık bazlı grafik
+        render_pie_bar_charts(sub, "Kod")
 
-    # <<< BURASI: tablo artık AGGRID ile >>>
+        if filter_key not in ["FON", "EMTIA", "NAKIT"]:
+            try:
+                h = get_historical_chart(sub, usd_try)
+                if h is not None:
+                    st.line_chart(h)
+            except Exception:
+                st.warning("Tarihsel grafik yüklenemedi.")
+
+    # BURADA AGGRID YOK – kendi HTML tablomuz:
     render_table(sub)
 
 
@@ -184,6 +120,49 @@ def render_detail_view(symbol, pazar):
                 yaxis_title="Fiyat",
                 template="plotly_dark",
                 height=600,
+                xaxis=dict(
+                    rangeselector=dict(
+                        buttons=list(
+                            [
+                                dict(
+                                    count=1,
+                                    label="1A",
+                                    step="month",
+                                    stepmode="backward",
+                                ),
+                                dict(
+                                    count=3,
+                                    label="3A",
+                                    step="month",
+                                    stepmode="backward",
+                                ),
+                                dict(
+                                    count=6,
+                                    label="6A",
+                                    step="month",
+                                    stepmode="backward",
+                                ),
+                                dict(
+                                    count=1,
+                                    label="YTD",
+                                    step="year",
+                                    stepmode="todate",
+                                ),
+                                dict(
+                                    count=1,
+                                    label="1Y",
+                                    step="year",
+                                    stepmode="backward",
+                                ),
+                                dict(step="all", label="TÜMÜ"),
+                            ]
+                        ),
+                        bgcolor="#262730",
+                        font=dict(color="white"),
+                    ),
+                    rangeslider=dict(visible=False),
+                    type="date",
+                ),
             )
             st.plotly_chart(fig, use_container_width=True)
 
