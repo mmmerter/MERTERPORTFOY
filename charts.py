@@ -283,7 +283,6 @@ def render_pazar_tab(df, filter_key, symb, usd_try, varlik_gorunumu, total_spot_
 #  DETAY SAYFASI
 # --------------------------------------------------------------------
 def render_detail_view(symbol, pazar):
-# ... (render_detail_view içeriği değişmedi)
     st.markdown(f"### 🔎 {symbol} Detaylı Analizi")
 
     if "FON" in pazar:
