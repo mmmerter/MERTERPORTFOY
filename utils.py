@@ -123,7 +123,7 @@ def styled_dataframe(df: pd.DataFrame):
 def render_table(df: pd.DataFrame, height: int = 420):
     """
     Tüm sekmelerde tablo gösterimi:
-    - Büyük ve kalın font
+    - Büyük ve kalın font (CSS ile)
     - Kâr/Zarar kolonlarında pozitif yeşil, negatif kırmızı
     """
     if df.empty:
@@ -193,5 +193,4 @@ def render_table(df: pd.DataFrame, height: int = 420):
         theme="streamlit",
         height=height,
         fit_columns_on_grid_load=True,
-        enable_enterprise_modules=False,
     )
