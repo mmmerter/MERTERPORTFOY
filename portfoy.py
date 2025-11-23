@@ -40,7 +40,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# --- CSS (MOBİL VE GÖRSEL AYARLAR) ---
+# --- CSS ---
 st.markdown(
     """
 <style>
@@ -157,7 +157,7 @@ portfoy_df = get_data_from_sheet()
 
 c_title, c_toggle = st.columns([3, 1])
 with c_title:
-    st.title("🏦 Merter Portföy Takip Botu")
+    st.title("🏦 Merter'in Varlık Yönetim Terminali")
 with c_toggle:
     st.write("")
     GORUNUM_PB = st.radio("Para Birimi:", ["TRY", "USD"], horizontal=True)
@@ -174,15 +174,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# --- MENÜ (VADELİ ÇIKARILDI) ---
 selected = option_menu(
     menu_title=None,
     options=[
         "Dashboard", "Tümü", "BIST", "ABD", "FON", "Emtia", "Kripto",
-        "Vadeli", "Nakit", "Haberler", "İzleme", "Satışlar", "Ekle/Çıkar",
+        "Nakit", "Haberler", "İzleme", "Satışlar", "Ekle/Çıkar",
     ],
     icons=[
         "speedometer2", "list-task", "graph-up-arrow", "currency-dollar",
-        "piggy-bank", "fuel-pump", "currency-bitcoin", "lightning-charge",
+        "piggy-bank", "fuel-pump", "currency-bitcoin",
         "wallet2", "newspaper", "eye", "receipt", "gear",
     ],
     menu_icon="cast",
@@ -221,6 +222,18 @@ def run_analysis(df, usd_try_rate, view_currency):
 
         symbol = get_yahoo_symbol(kod, pazar)
         
+        # Sektör verisi çekme
+        sector = ""
+        if "BIST" in pazar or "ABD" in pazar:
+            try:
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                sector = info.get("sector", "Bilinmiyor")
+            except: sector = "Bilinmiyor"
+        elif "FON" in pazar: sector = "Yatırım Fonu"
+        elif "NAKIT" in pazar: sector = "Nakit Varlık"
+        elif "EMTIA" in pazar: sector = "Emtia"
+
         asset_currency = "TRY" if ("BIST" in pazar or "TL" in kod or "FON" in pazar or "EMTIA" in pazar or "NAKIT" in pazar) else "USD"
 
         curr, prev = 0, 0
@@ -233,9 +246,6 @@ def run_analysis(df, usd_try_rate, view_currency):
                     try: curr = yf.Ticker("EURTRY=X").history(period="1d")["Close"].iloc[-1]
                     except: curr = 36.0
                 prev = curr
-            elif "VADELI" in pazar:
-                h = yf.Ticker(symbol).history(period="2d")
-                curr = h["Close"].iloc[-1] if not h.empty else maliyet
             elif "FON" in pazar:
                 curr, prev = get_tefas_data(kod)
             elif "Gram Gümüş" in kod:
@@ -254,22 +264,18 @@ def run_analysis(df, usd_try_rate, view_currency):
                     prev = (p * USD_TRY) / 31.1035
             else:
                 h = yf.Ticker(symbol).history(period="2d")
-                curr = h["Close"].iloc[-1]
-                prev = h["Close"].iloc[0]
+                if not h.empty:
+                    curr = h["Close"].iloc[-1]
+                    prev = h["Close"].iloc[0]
         except: pass
 
         if curr == 0: curr = maliyet
         if prev == 0: prev = curr
         if curr > 0 and maliyet > 0 and (maliyet / curr) > 50: maliyet /= 100
 
-        if "VADELI" in pazar:
-            val_native = (curr - maliyet) * adet
-            cost_native = 0
-        else:
-            val_native = curr * adet
-            cost_native = maliyet * adet
-
-        daily_chg_native = (curr - prev) * adet if "VADELI" not in pazar else 0
+        val_native = curr * adet
+        cost_native = maliyet * adet
+        daily_chg_native = (curr - prev) * adet
 
         if GORUNUM_PB == "TRY":
             if asset_currency == "USD":
@@ -288,13 +294,14 @@ def run_analysis(df, usd_try_rate, view_currency):
             else:
                 f_g = curr; v_g = val_native; c_g = cost_native; d_g = daily_chg_native
 
-        pnl = v_g if "VADELI" in pazar else v_g - c_g
+        pnl = v_g - c_g
         pnl_pct = (pnl / c_g * 100) if c_g > 0 else 0
 
         results.append({
             "Kod": kod, "Pazar": pazar, "Tip": tip, "Adet": adet, "Maliyet": maliyet,
             "Fiyat": f_g, "PB": GORUNUM_PB, "Değer": v_g, "Top. Kâr/Zarar": pnl,
-            "Top. %": pnl_pct, "Gün. Kâr/Zarar": d_g, "Notlar": row.get("Notlar", "")
+            "Top. %": pnl_pct, "Gün. Kâr/Zarar": d_g, "Notlar": row.get("Notlar", ""),
+            "Sektör": sector
         })
 
     return pd.DataFrame(results)
@@ -304,7 +311,7 @@ portfoy_only = master_df[master_df["Tip"] == "Portfoy"]
 takip_only = master_df[master_df["Tip"] == "Takip"]
 
 # --- GÖRÜNÜM AYARI ---
-TOTAL_SPOT_DEGER = portfoy_only[~portfoy_only["Pazar"].str.contains("VADELI", na=False)]["Değer"].sum()
+TOTAL_SPOT_DEGER = portfoy_only["Değer"].sum()
 st.markdown("---")
 VARLIK_GORUNUMU = st.radio("Varlık Gösterimi:", ["YÜZDE (%)", "TUTAR (₺/$)",], index=0, horizontal=True)
 st.markdown("---")
@@ -312,19 +319,29 @@ st.markdown("---")
 # --- MENÜLER ---
 if selected == "Dashboard":
     if not portfoy_only.empty:
-        spot_only = portfoy_only[~portfoy_only["Pazar"].str.contains("VADELI", na=False)]
+        spot_only = portfoy_only
         t_v = spot_only["Değer"].sum()
         t_p = spot_only["Top. Kâr/Zarar"].sum()
         
-        # Dashboard yüzdesi için toplam maliyet hesabı
         t_maliyet = t_v - t_p
         pct = (t_p / t_maliyet * 100) if t_maliyet != 0 else 0
 
         c1, c2 = st.columns(2)
-        c1.metric("Toplam Spot Varlık", f"{sym}{t_v:,.0f}")
+        c1.metric("Toplam Varlık", f"{sym}{t_v:,.0f}")
         c2.metric("Genel Kâr/Zarar", f"{sym}{t_p:,.0f}", delta=f"{pct:.2f}%")
 
         st.divider()
+        
+        # --- TARIHSEL GRAFIK ---
+        st.subheader("📈 Tarihsel Portföy Değeri")
+        hist_chart = get_historical_chart(spot_only, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
+        else:
+            st.info("Tarihsel veri hazırlanıyor...")
+
+        st.divider()
+        
         st.subheader("📊 Pazarlara Göre Dağılım")
         dash_pazar = spot_only.groupby("Pazar", as_index=False).agg({"Değer": "sum", "Top. Kâr/Zarar": "sum"})
         render_pie_bar_charts(dash_pazar, "Pazar", all_tab=False, varlik_gorunumu=VARLIK_GORUNUMU, total_spot_deger=TOTAL_SPOT_DEGER)
@@ -353,21 +370,6 @@ if selected == "Dashboard":
 elif selected == "Tümü":
     st.subheader("📊 Varlık Bazlı Dağılım (Tümü)")
     render_pazar_tab(portfoy_only, "Tümü", sym, USD_TRY, VARLIK_GORUNUMU, TOTAL_SPOT_DEGER)
-
-elif selected == "Vadeli":
-    st.subheader("🚀 Vadeli İşlemler")
-    with st.expander("🔑 API ile Otomatik Çek (Opsiyonel)"):
-        ak = st.text_input("API Key", type="password")
-        ask = st.text_input("Secret", type="password")
-        if ak and ask:
-            stats, df_pos = get_binance_positions(ak, ask)
-            if stats:
-                st.metric("Cüzdan", f"${stats['wallet']:,.2f}")
-                st.dataframe(df_pos, use_container_width=True)
-            else: st.error(df_pos)
-    st.markdown("---")
-    st.markdown("### 📝 Manuel Vadeli Takip")
-    render_pazar_tab(portfoy_only, "VADELI", sym, USD_TRY, "TUTAR (₺/$)", TOTAL_SPOT_DEGER)
 
 elif selected == "Nakit": render_pazar_tab(portfoy_only, "NAKIT", sym, USD_TRY, VARLIK_GORUNUMU, TOTAL_SPOT_DEGER)
 elif selected == "BIST": render_pazar_tab(portfoy_only, "BIST", sym, USD_TRY, VARLIK_GORUNUMU, TOTAL_SPOT_DEGER)
@@ -398,7 +400,7 @@ elif selected == "Ekle/Çıkar":
     st.header("Varlık Yönetimi")
     tab1, tab2, tab3 = st.tabs(["Ekle", "Düzenle", "Sil/Sat"])
     with tab1:
-        pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()) + ["VADELI (Manuel)"])
+        pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()))
         kod = st.text_input("Kod (Örn: BTC, THYAO)").upper()
         c1, c2 = st.columns(2)
         adet = c1.text_input("Adet/Kontrat", "0")
@@ -437,5 +439,3 @@ elif selected == "Ekle/Çıkar":
                 st.success("Silindi!")
                 time.sleep(1)
                 st.rerun()
-
-
