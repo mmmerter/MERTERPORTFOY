@@ -1,5 +1,9 @@
 import re
 import pandas as pd
+import streamlit as st
+
+from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid.shared import JsCode
 
 ANALYSIS_COLS = [
     "Kod",
@@ -108,68 +112,63 @@ def smart_parse(text_val):
         return 0.0
 
 
+# Eski stil fonksiyonu kalsın, ihtiyaç olursa kullanırız
 def styled_dataframe(df: pd.DataFrame):
-    """
-    Dataframe için ortak stil:
-    - Yazılar daha büyük ve kalın
-    - Kâr / Zarar kolonları: pozitif yeşil, negatif kırmızı
-    """
     if df.empty:
         return df
+    return df
 
-    # Sayısal kolon formatı
-    format_dict = {}
-    for col in df.columns:
-        if df[col].dtype in ["float64", "float32", "int64", "int32"]:
-            format_dict[col] = "{:,.2f}"
 
-    styler = df.style.format(format_dict)
+# --- AGGRID TABLO RENDERER ---
+def render_table(df: pd.DataFrame, height: int = 420):
+    """
+    Tüm sekmelerde tablo gösterimi:
+    - Büyük ve kalın font
+    - Kâr/Zarar kolonlarında pozitif yeşil, negatif kırmızı
+    """
+    if df.empty:
+        st.info("Veri yok.")
+        return
 
-    # Genel font boyutu & kalınlık
-    styler = styler.set_table_styles(
-        [
-            {
-                "selector": "th",
-                "props": [
-                    ("font-size", "15px"),
-                    ("font-weight", "bold"),
-                    ("text-align", "center"),
-                ],
-            },
-            {
-                "selector": "td",
-                "props": [
-                    ("font-size", "14px"),
-                    ("font-weight", "bold"),
-                ],
-            },
-        ]
+    gb = GridOptionsBuilder.from_dataframe(df)
+
+    # Varsayılan kolon davranışı
+    gb.configure_default_column(
+        resizable=True,
+        filter=True,
+        sortable=True,
     )
 
-    # Sayısal kolonları sağa hizala
+    # Sayısal kolonlar için sağ hizalama
     num_cols = [
         col
         for col in df.columns
         if df[col].dtype in ["float64", "float32", "int64", "int32"]
     ]
-    if num_cols:
-        styler = styler.set_properties(
-            subset=num_cols,
-            **{"text-align": "right"},
-        )
+    for col in num_cols:
+        gb.configure_column(col, type=["numericColumn", "rightAligned"])
 
-    # Kâr / Zarar ve yüzde kolonlarını renklendir
-    def color_pnl(val):
-        try:
-            v = float(val)
-        except Exception:
-            return ""
-        if v > 0:
-            return "color: #00e676;"  # yeşil
-        elif v < 0:
-            return "color: #ff5252;"  # kırmızı
-        else:
-            return "color: #cccccc;"  # nötr gri
+    # Kâr / Zarar kolonları için JS bazlı renk fonksiyonu
+    pnl_style = JsCode(
+        """
+        function(params) {
+            if (params.value === null || params.value === undefined || params.value === '') {
+                return {'color': '#cccccc', 'font-weight': 'bold'};
+            }
+            let v = Number(params.value);
+            if (isNaN(v)) {
+                return {'color': '#cccccc', 'font-weight': 'bold'};
+            }
+            if (v > 0) {
+                return {'color': '#00e676', 'font-weight': 'bold'};
+            } else if (v < 0) {
+                return {'color': '#ff5252', 'font-weight': 'bold'};
+            } else {
+                return {'color': '#cccccc', 'font-weight': 'bold'};
+            }
+        }
+        """
+    )
 
     pnl_cols = [
         "Top. Kâr/Zarar",
@@ -179,6 +178,20 @@ def styled_dataframe(df: pd.DataFrame):
     ]
     for col in pnl_cols:
         if col in df.columns:
-            styler = styler.applymap(color_pnl, subset=[col])
+            gb.configure_column(col, cellStyle=pnl_style)
 
-    return styler
+    # Satır yüksekliği + genel grid ayarları
+    gb.configure_grid_options(
+        rowHeight=32,
+    )
+
+    grid_options = gb.build()
+
+    AgGrid(
+        df,
+        gridOptions=grid_options,
+        theme="streamlit",
+        height=height,
+        fit_columns_on_grid_load=True,
+        enable_enterprise_modules=False,
+    )
