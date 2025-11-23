@@ -10,13 +10,13 @@ import ccxt
 import pandas as pd
 import re
 
-from utils import get_yahoo_symbol # <-- Burası kritik!
+from utils import get_yahoo_symbol
 
 SHEET_NAME = "PortfoyData"
 
+
 # --- GOOGLE SHEETS ---
 def get_data_from_sheet():
-# ... (get_data_from_sheet içeriği değişmedi)
     try:
         scope = [
             "https://spreadsheets.google.com/feeds",
@@ -56,7 +56,6 @@ def get_data_from_sheet():
 
 
 def save_data_to_sheet(df):
-# ... (save_data_to_sheet içeriği değişmedi)
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
@@ -71,7 +70,6 @@ def save_data_to_sheet(df):
 
 
 def get_sales_history():
-# ... (get_sales_history içeriği değişmedi)
     try:
         scope = [
             "https://spreadsheets.google.com/feeds",
@@ -111,7 +109,6 @@ def get_sales_history():
 
 
 def add_sale_record(date, code, market, qty, price, cost, profit):
-# ... (add_sale_record içeriği değişmedi)
     try:
         scope = [
             "https://spreadsheets.google.com/feeds",
@@ -140,7 +137,6 @@ def add_sale_record(date, code, market, qty, price, cost, profit):
 # --- TEFAS ---
 @st.cache_data(ttl=14400)  # 4 saat – KRAL ile aynı
 def get_tefas_data(fund_code):
-# ... (get_tefas_data içeriği değişmedi)
     # Önce TEFAS HTML parse denemesi
     try:
         url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
@@ -174,7 +170,6 @@ def get_tefas_data(fund_code):
 # --- COINGECKO ---
 @st.cache_data(ttl=300)  # 5 dk – KRAL’daki gibi
 def get_crypto_globals():
-# ... (get_crypto_globals içeriği değişmedi)
     try:
         d = requests.get(
             "https://api.coingecko.com/api/v3/global", timeout=5
@@ -193,7 +188,6 @@ def get_crypto_globals():
 # --- USD/TRY ---
 @st.cache_data(ttl=300)  # 5 dk – KRAL ile aynı
 def get_usd_try():
-# ... (get_usd_try içeriği değişmedi)
     try:
         return yf.Ticker("TRY=X").history(period="1d")["Close"].iloc[-1]
     except Exception:
@@ -203,7 +197,6 @@ def get_usd_try():
 # --- HABERLER ---
 @st.cache_data(ttl=300)
 def get_financial_news(topic="finance"):
-# ... (get_financial_news içeriği değişmedi)
     urls = {
         "BIST": "https://news.google.com/rss/search?q=Borsa+Istanbul+Hisseler&hl=tr&gl=TR&ceid=TR:tr",
         "KRIPTO": "https://news.google.com/rss/search?q=Kripto+Para+Bitcoin&hl=tr&gl=TR&ceid=TR:tr",
@@ -359,7 +352,6 @@ def get_tickers_data(df_portfolio, usd_try):
 
 # --- BINANCE VADELİ ---
 def get_binance_pnl_stats(exchange):
-# ... (get_binance_pnl_stats içeriği değişmedi)
     try:
         income = exchange.fetch_income(params={"limit": 1000})
         now = datetime.now().timestamp() * 1000
@@ -388,7 +380,6 @@ def get_binance_pnl_stats(exchange):
 
 
 def get_binance_positions(api_key, api_secret):
-# ... (get_binance_positions içeriği değişmedi)
     try:
         exchange = ccxt.binance(
             {
