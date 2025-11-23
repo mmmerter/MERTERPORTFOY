@@ -57,7 +57,7 @@ def get_yahoo_symbol(kod, pazar):
         return "KOZAA.IS"
 
     if pazar == "NAKIT":
-        return kod
+        return kod # Nakit sembolü olduğu gibi döner (TL, USD)
     if pazar == "FON":
         return kod
 
@@ -66,6 +66,12 @@ def get_yahoo_symbol(kod, pazar):
     elif "KRIPTO" in pazar:
         return f"{kod}-USD" if not kod.endswith("-USD") else kod
     elif "EMTIA" in pazar:
+        # Gramlar için Ons sembolü döndür, hesaplama charts.py'da yapılacak
+        if "Gram Altın" in kod or "GRAM ALTIN" in kod:
+            return "GC=F"
+        if "Gram Gümüş" in kod or "GRAM GÜMÜŞ" in kod:
+            return "SI=F"
+            
         map_emtia = {
             "Altın ONS": "GC=F",
             "Gümüş ONS": "SI=F",
@@ -125,22 +131,22 @@ def styled_dataframe(df: pd.DataFrame):
 
     styler = df.style.format(format_dict)
 
-    # Genel font boyutu & kalınlık (İKİNCİ VE DAHA BÜYÜK DEĞİŞİKLİK BURADA YAPILDI)
+    # Genel font boyutu & kalınlık
     styler = styler.set_table_styles(
         [
             {
                 "selector": "th",
                 "props": [
-                    ("font-size", "22px"),  # Yeni, çok daha büyük başlık boyutu
-                    ("font-weight", "900"), # Ekstra kalınlık
+                    ("font-size", "22px"),
+                    ("font-weight", "900"),
                     ("text-align", "center"),
                 ],
             },
             {
                 "selector": "td",
                 "props": [
-                    ("font-size", "20px"),  # Yeni, çok daha büyük hücre boyutu
-                    ("font-weight", "900"), # Ekstra kalınlık
+                    ("font-size", "20px"),
+                    ("font-weight", "900"),
                 ],
             },
         ]
@@ -175,7 +181,7 @@ def styled_dataframe(df: pd.DataFrame):
         "Top. Kâr/Zarar",
         "Top. %",
         "Gün. Kâr/Zarar",
-        "Kâr/Zarar",  # Satışlar sekmesi için
+        "Kâr/Zarar",
     ]
     for col in pnl_cols:
         if col in df.columns:
