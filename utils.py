@@ -2,9 +2,6 @@ import re
 import pandas as pd
 import streamlit as st
 
-from st_aggrid import AgGrid, GridOptionsBuilder
-from st_aggrid.shared import JsCode
-
 ANALYSIS_COLS = [
     "Kod",
     "Pazar",
@@ -112,84 +109,65 @@ def smart_parse(text_val):
         return 0.0
 
 
-# Eski stil fonksiyonu kalsın, ihtiyaç olursa kullanırız
 def styled_dataframe(df: pd.DataFrame):
-    if df.empty:
-        return df
+    """Placeholder – artık tablolarda render_table kullanıyoruz."""
     return df
 
 
-# --- AGGRID TABLO RENDERER ---
-def render_table(df: pd.DataFrame, height: int = 420):
+def render_table(df: pd.DataFrame):
     """
     Tüm sekmelerde tablo gösterimi:
-    - Büyük ve kalın font (CSS ile portfoy.py içinde ayarlı)
-    - Kâr/Zarar kolonlarında pozitif yeşil, negatif kırmızı
+    - Yazılar büyük ve kalın
+    - Kâr/Zarar kolonları: pozitif yeşil, negatif kırmızı
     """
     if df.empty:
         st.info("Veri yok.")
         return
 
-    gb = GridOptionsBuilder.from_dataframe(df)
+    # Gösterim için kopya
+    display_df = df.copy()
 
-    # Varsayılan kolon davranışı
-    gb.configure_default_column(
-        resizable=True,
-        filter=True,
-        sortable=True,
-    )
-
-    # Sayısal kolonlar için sağ hizalama
+    # Sayısal kolonları formatla
     num_cols = [
-        col
-        for col in df.columns
-        if df[col].dtype in ["float64", "float32", "int64", "int32"]
+        col for col in display_df.columns
+        if pd.api.types.is_numeric_dtype(display_df[col])
     ]
     for col in num_cols:
-        gb.configure_column(col, type=["numericColumn", "rightAligned"])
+        display_df[col] = display_df[col].apply(
+            lambda x: "" if pd.isna(x) else f"{x:,.2f}"
+        )
 
-    # Kâr / Zarar kolonları için JS bazlı renk fonksiyonu
-    pnl_style = JsCode(
-        """
-        function(params) {
-            if (params.value === null || params.value === undefined || params.value === '') {
-                return {'color': '#cccccc', 'font-weight': 'bold'};
-            }
-            let v = Number(params.value);
-            if (isNaN(v)) {
-                return {'color': '#cccccc', 'font-weight': 'bold'};
-            }
-            if (v > 0) {
-                return {'color': '#00e676', 'font-weight': 'bold'};
-            } else if (v < 0) {
-                return {'color': '#ff5252', 'font-weight': 'bold'};
-            } else {
-                return {'color': '#cccccc', 'font-weight': 'bold'};
-            }
-        }
-        """
-    )
+    cols = list(display_df.columns)
 
-    pnl_cols = [
-        "Top. Kâr/Zarar",
-        "Top. %",
-        "Gün. Kâr/Zarar",
-        "Kâr/Zarar",  # Satışlar sekmesi için
-    ]
-    for col in pnl_cols:
-        if col in df.columns:
-            gb.configure_column(col, cellStyle=pnl_style)
+    html = '<table class="custom-table"><thead><tr>'
+    for c in cols:
+        html += f"<th>{c}</th>"
+    html += "</tr></thead><tbody>"
 
-    # Satır yüksekliği + genel grid ayarları
-    gb.configure_grid_options(
-        rowHeight=32,
-    )
+    for idx, row in display_df.iterrows():
+        html += "<tr>"
+        for c in cols:
+            val = row[c]
+            raw = df.loc[idx, c] if c in df.columns else None
+            style = ""
 
-    grid_options = gb.build()
+            if c in ["Top. Kâr/Zarar", "Top. %", "Gün. Kâr/Zarar", "Kâr/Zarar"]:
+                try:
+                    v = float(raw)
+                    if v > 0:
+                        style = ' style="color:#00e676; font-weight:bold;"'
+                    elif v < 0:
+                        style = ' style="color:#ff5252; font-weight:bold;"'
+                    else:
+                        style = ' style="color:#cccccc; font-weight:bold;"'
+                except Exception:
+                    style = ' style="color:#cccccc; font-weight:bold;"'
+            else:
+                style = ' style="color:#ffffff; font-weight:600;"'
 
-    # Basit çağrı: sorun çıkaran ekstra parametre yok
-    AgGrid(
-        df,
-        gridOptions=grid_options,
-        height=height,
-    )
+            html += f"<td{style}>{val}</td>"
+        html += "</tr>"
+
+    html += "</tbody></table>"
+
+    st.markdown(html, unsafe_allow_html=True)
