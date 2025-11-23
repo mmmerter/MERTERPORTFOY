@@ -238,7 +238,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- YENİ MENÜ (Sade 6 Buton) ---
+# --- MENÜ (6 Buton) ---
 selected = option_menu(
     menu_title=None,
     options=[
@@ -299,15 +299,15 @@ def run_analysis(df, usd_try_rate, view_currency):
             continue
 
         symbol = get_yahoo_symbol(kod, pazar)
-        
-        # Sektör verisi çekme
+
+        # Sektör
         sector = ""
         if "BIST" in pazar or "ABD" in pazar:
             try:
                 ticker = yf.Ticker(symbol)
                 info = ticker.info
                 sector = info.get("sector", "Bilinmiyor")
-            except:
+            except Exception:
                 sector = "Bilinmiyor"
         elif "FON" in pazar:
             sector = "Yatırım Fonu"
@@ -316,20 +316,34 @@ def run_analysis(df, usd_try_rate, view_currency):
         elif "EMTIA" in pazar:
             sector = "Emtia"
 
-        asset_currency = "TRY" if ("BIST" in pazar or "TL" in kod or "FON" in pazar or "EMTIA" in pazar or "NAKIT" in pazar) else "USD"
+        asset_currency = (
+            "TRY"
+            if (
+                "BIST" in pazar
+                or "TL" in kod
+                or "FON" in pazar
+                or "EMTIA" in pazar
+                or "NAKIT" in pazar
+            )
+            else "USD"
+        )
 
         curr, prev = 0, 0
 
         try:
-            if "NAKIT" in pazar:
+            if "NAKIT" in pazar.upper():
                 if kod == "TL":
                     curr = 1
                 elif kod == "USD":
                     curr = USD_TRY
                 elif kod == "EUR":
                     try:
-                        curr = yf.Ticker("EURTRY=X").history(period="1d")["Close"].iloc[-1]
-                    except:
+                        curr = (
+                            yf.Ticker("EURTRY=X")
+                            .history(period="1d")["Close"]
+                            .iloc[-1]
+                        )
+                    except Exception:
                         curr = 36.0
                 prev = curr
             elif "FON" in pazar:
@@ -353,7 +367,7 @@ def run_analysis(df, usd_try_rate, view_currency):
                 if not h.empty:
                     curr = h["Close"].iloc[-1]
                     prev = h["Close"].iloc[0]
-        except:
+        except Exception:
             pass
 
         if curr == 0:
@@ -393,21 +407,23 @@ def run_analysis(df, usd_try_rate, view_currency):
         pnl = v_g - c_g
         pnl_pct = (pnl / c_g * 100) if c_g > 0 else 0
 
-        results.append({
-            "Kod": kod,
-            "Pazar": pazar,
-            "Tip": tip,
-            "Adet": adet,
-            "Maliyet": maliyet,
-            "Fiyat": f_g,
-            "PB": GORUNUM_PB,
-            "Değer": v_g,
-            "Top. Kâr/Zarar": pnl,
-            "Top. %": pnl_pct,
-            "Gün. Kâr/Zarar": d_g,
-            "Notlar": row.get("Notlar", ""),
-            "Sektör": sector,
-        })
+        results.append(
+            {
+                "Kod": kod,
+                "Pazar": pazar,
+                "Tip": tip,
+                "Adet": adet,
+                "Maliyet": maliyet,
+                "Fiyat": f_g,
+                "PB": GORUNUM_PB,
+                "Değer": v_g,
+                "Top. Kâr/Zarar": pnl,
+                "Top. %": pnl_pct,
+                "Gün. Kâr/Zarar": d_g,
+                "Notlar": row.get("Notlar", ""),
+                "Sektör": sector,
+            }
+        )
 
     return pd.DataFrame(results)
 
@@ -417,7 +433,7 @@ portfoy_only = master_df[master_df["Tip"] == "Portfoy"]
 takip_only = master_df[master_df["Tip"] == "Takip"]
 
 
-# --- GLOBAL INFO BAR (Dashboard + Portföy sekmeleri için) ---
+# --- GLOBAL INFO BAR ---
 def render_kral_infobar(df, sym):
     if df is None or df.empty:
         return
@@ -432,7 +448,6 @@ def render_kral_infobar(df, sym):
     else:
         daily_sign = "⚪"
 
-    # Haftalık / Aylık / YTD henüz hesaplanmıyor, placeholder:
     weekly_txt = "—"
     monthly_txt = "—"
     ytd_txt = "—"
@@ -482,16 +497,17 @@ VARLIK_GORUNUMU = st.radio(
 )
 st.markdown("---")
 
-# --- MENÜLER ---
+# --- MENÜ İÇERİKLERİ ---
+
 if selected == "Dashboard":
     if not portfoy_only.empty:
-        # INFO BAR (Dashboard'ta genel portföy)
+        # INFO BAR
         render_kral_infobar(portfoy_only, sym)
 
         spot_only = portfoy_only
         t_v = spot_only["Değer"].sum()
         t_p = spot_only["Top. Kâr/Zarar"].sum()
-        
+
         t_maliyet = t_v - t_p
         pct = (t_p / t_maliyet * 100) if t_maliyet != 0 else 0
 
@@ -500,17 +516,8 @@ if selected == "Dashboard":
         c2.metric("Genel Kâr/Zarar", f"{sym}{t_p:,.0f}", delta=f"{pct:.2f}%")
 
         st.divider()
-        
-        # --- TARIHSEL GRAFIK ---
-        st.subheader("📈 Tarihsel Portföy Değeri")
-        hist_chart = get_historical_chart(spot_only, USD_TRY, GORUNUM_PB)
-        if hist_chart:
-            st.plotly_chart(hist_chart, use_container_width=True)
-        else:
-            st.info("Tarihsel veri hazırlanıyor...")
 
-        st.divider()
-        
+        # --- PAZAR DAĞILIMI ---
         st.subheader("📊 Pazarlara Göre Dağılım")
         dash_pazar = spot_only.groupby("Pazar", as_index=False).agg(
             {"Değer": "sum", "Top. Kâr/Zarar": "sum"}
@@ -562,6 +569,16 @@ if selected == "Dashboard":
         )
         fig.update_layout(margin=dict(t=0, l=0, r=0, b=0))
         st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+
+        # --- TARİHSEL GRAFİK EN ALTA ---
+        st.subheader("📈 Tarihsel Portföy Değeri (60 Gün)")
+        hist_chart = get_historical_chart(spot_only, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
+        else:
+            st.info("Tarihsel veri hazırlanıyor...")
     else:
         st.info("Boş.")
 
@@ -572,7 +589,7 @@ elif selected == "Portföy":
         ["Tümü", "BIST", "ABD", "FON", "Emtia", "Kripto", "Nakit"]
     )
 
-    # Tümü: tüm portföy
+    # Tümü
     with tab_tumu:
         render_kral_infobar(portfoy_only, sym)
         render_pazar_tab(
@@ -583,11 +600,17 @@ elif selected == "Portföy":
             VARLIK_GORUNUMU,
             TOTAL_SPOT_DEGER,
         )
+        st.subheader("📈 Tarihsel Değer - Tümü (60 Gün)")
+        hist_chart = get_historical_chart(portfoy_only, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
 
-    # BIST: Pazar içinde "BIST" geçenler
+    # BIST
     with tab_bist:
         bist_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains("BIST", case=False, na=False)
+            portfoy_only["Pazar"].astype(str).str.contains(
+                "BIST", case=False, na=False
+            )
         ]
         render_kral_infobar(bist_df, sym)
         render_pazar_tab(
@@ -598,8 +621,12 @@ elif selected == "Portföy":
             VARLIK_GORUNUMU,
             TOTAL_SPOT_DEGER,
         )
+        st.subheader("📈 Tarihsel Değer - BIST (60 Gün)")
+        hist_chart = get_historical_chart(bist_df, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
 
-    # ABD: Pazar içinde "ABD" geçenler
+    # ABD
     with tab_abd:
         abd_df = portfoy_only[
             portfoy_only["Pazar"].astype(str).str.contains("ABD", case=False, na=False)
@@ -613,8 +640,12 @@ elif selected == "Portföy":
             VARLIK_GORUNUMU,
             TOTAL_SPOT_DEGER,
         )
+        st.subheader("📈 Tarihsel Değer - ABD (60 Gün)")
+        hist_chart = get_historical_chart(abd_df, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
 
-    # FON: Pazar içinde "FON" geçenler
+    # FON
     with tab_fon:
         fon_df = portfoy_only[
             portfoy_only["Pazar"].astype(str).str.contains("FON", case=False, na=False)
@@ -628,11 +659,17 @@ elif selected == "Portföy":
             VARLIK_GORUNUMU,
             TOTAL_SPOT_DEGER,
         )
+        st.subheader("📈 Tarihsel Değer - FON (60 Gün)")
+        hist_chart = get_historical_chart(fon_df, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
 
-    # EMTIA: Pazar içinde "EMTIA" geçenler
+    # EMTIA
     with tab_emtia:
         emtia_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains("EMTIA", case=False, na=False)
+            portfoy_only["Pazar"].astype(str).str.contains(
+                "EMTIA", case=False, na=False
+            )
         ]
         render_kral_infobar(emtia_df, sym)
         render_pazar_tab(
@@ -643,11 +680,17 @@ elif selected == "Portföy":
             VARLIK_GORUNUMU,
             TOTAL_SPOT_DEGER,
         )
+        st.subheader("📈 Tarihsel Değer - Emtia (60 Gün)")
+        hist_chart = get_historical_chart(emtia_df, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
 
-    # KRIPTO: Pazar içinde "KRIPTO" geçenler
+    # KRIPTO
     with tab_kripto:
         kripto_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains("KRIPTO", case=False, na=False)
+            portfoy_only["Pazar"].astype(str).str.contains(
+                "KRIPTO", case=False, na=False
+            )
         ]
         render_kral_infobar(kripto_df, sym)
         render_pazar_tab(
@@ -658,11 +701,17 @@ elif selected == "Portföy":
             VARLIK_GORUNUMU,
             TOTAL_SPOT_DEGER,
         )
+        st.subheader("📈 Tarihsel Değer - Kripto (60 Gün)")
+        hist_chart = get_historical_chart(kripto_df, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
 
-    # NAKIT: Pazar içinde "NAKIT" geçenler
+    # NAKIT
     with tab_nakit:
         nakit_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains("NAKIT", case=False, na=False)
+            portfoy_only["Pazar"].astype(str).str.contains(
+                "NAKIT", case=False, na=False
+            )
         ]
         render_kral_infobar(nakit_df, sym)
         render_pazar_tab(
@@ -673,6 +722,10 @@ elif selected == "Portföy":
             VARLIK_GORUNUMU,
             TOTAL_SPOT_DEGER,
         )
+        st.subheader("📈 Tarihsel Değer - Nakit (60 Gün)")
+        hist_chart = get_historical_chart(nakit_df, USD_TRY, GORUNUM_PB)
+        if hist_chart:
+            st.plotly_chart(hist_chart, use_container_width=True)
 
 elif selected == "Haberler":
     tab1, tab2, tab3, tab4 = st.tabs(["BIST", "Kripto", "Global", "Döviz"])
@@ -711,6 +764,8 @@ elif selected == "Satışlar":
 elif selected == "Ekle/Çıkar":
     st.header("Varlık Yönetimi")
     tab1, tab2, tab3 = st.tabs(["Ekle", "Düzenle", "Sil/Sat"])
+
+    # EKLE
     with tab1:
         pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()))
         kod = st.text_input("Kod (Örn: BTC, THYAO)").upper()
@@ -737,6 +792,8 @@ elif selected == "Ekle/Çıkar":
                 st.success("Eklendi!")
                 time.sleep(1)
                 st.rerun()
+
+    # DÜZENLE
     with tab2:
         if not portfoy_df.empty:
             s = st.selectbox("Seç", portfoy_df["Kod"].unique())
@@ -763,6 +820,8 @@ elif selected == "Ekle/Çıkar":
                     st.success("Güncellendi!")
                     time.sleep(1)
                     st.rerun()
+
+    # SİL
     with tab3:
         if not portfoy_df.empty:
             s = st.selectbox("Silinecek", portfoy_df["Kod"].unique(), key="del")
