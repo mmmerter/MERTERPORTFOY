@@ -272,7 +272,7 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
         if prices is None or prices.empty:
             continue
 
-        # 🔧 TZ-FIX: timezone'lu index varsa timezone'u sıfırla
+        # TZ-FIX: timezone'lu index varsa timezone'u sıfırla
         prices.index = pd.to_datetime(prices.index).tz_localize(None)
 
         # TRY / USD çevirisi
@@ -292,9 +292,13 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
     if not all_series:
         return None
 
-    # Tüm serileri hizalayıp topla
-    portfolio_series = pd.concat(all_series, axis=1).sum(axis=1)
-    portfolio_series = portfolio_series.sort_index()
+    # Tüm serileri hizalayıp topla + forward fill
+    df_concat = pd.concat(all_series, axis=1)
+    df_concat.index = pd.to_datetime(df_concat.index)
+    df_concat = df_concat.sort_index()
+    df_concat = df_concat.ffill()  # eksik günleri son değerle doldur
+
+    portfolio_series = df_concat.sum(axis=1)
     portfolio_series = portfolio_series[-60:]  # son 60 gün
 
     hist_df = portfolio_series.reset_index()
