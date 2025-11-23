@@ -40,22 +40,22 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# --- CSS (ÖZEL KARTLAR İÇİN GÜNCELLENDİ) ---
+# --- CSS (TICKER ALANI GÜNCELLENDİ) ---
 st.markdown(
     """
 <style>
     .block-container {padding-top: 1rem;}
 
-    /* Custom Metric Box Base Styles */
+    /* Custom Metric Box Styles remain unchanged */
     .custom-metric-box {
         background-color: #262730;
         border-radius: 10px;
         padding: 15px;
         border: 1px solid #464b5f;
-        box-shadow: 0 0 5px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.4); 
         transition: box-shadow 0.3s ease-in-out, border 0.3s ease-in-out;
         min-height: 100px;
-        height: 100%; /* Sütunlar arasında düzgün yayılma için */
+        height: 100%;
     }
     .custom-metric-box .label { 
         color: #bfbfbf; 
@@ -81,7 +81,7 @@ st.markdown(
         margin-top: 10px; 
     }
     
-    /* Neon Glow Dynamic Classes (GARANTİLİ PARLAMA) */
+    /* Neon Glow Dynamic Classes remain unchanged */
     .metric-glow-pos {
         box-shadow: 0 0 10px #00e676, 0 0 15px #00e676, 0 0 20px rgba(0, 230, 118, 0.4);
         border: 1px solid #00e676;
@@ -92,7 +92,7 @@ st.markdown(
     }
 
 
-    /* Ticker CSS remains unchanged */
+    /* Ticker CSS (DEĞİŞİKLİK BURADA) */
     .ticker-container {
         width: 100%;
         overflow: hidden;
@@ -119,10 +119,15 @@ st.markdown(
         white-space: nowrap;
         padding-left: 0;
         font-family: 'Courier New', Courier, monospace;
-        font-size: 16px;
-        font-weight: 900;
+        font-size: 22px; /* <-- BÜYÜTÜLDÜ (16px -> 22px) */
+        font-weight: 900; /* Zaten en kalın */
         color: #00e676;
     }
+    
+    .ticker-label { /* YENİ BAŞLIK RENGİ SINIFI */
+        color: #bbbbff; /* Farklı bir renk */
+    }
+    
     .animate-market { animation: ticker 65s linear infinite; color: #4da6ff; }
     .animate-portfolio { animation: ticker 55s linear infinite; color: #ffd700; }
 
@@ -152,15 +157,6 @@ st.markdown(
     a { text-decoration: none !important; }
     a:hover { text-decoration: underline !important; }
     
-    /* Eski st.metric override'larını kaldırıyoruz */
-    div[data-testid="stMetric"] {
-        /* Bu stil, yukarıdaki .custom-metric-box ile değiştirildi */
-        background-color: #262730 !important;
-        border: 1px solid #464b5f;
-        border-radius: 10px;
-        padding: 15px;
-        color: #ffffff !important;
-    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -479,7 +475,7 @@ if selected == "Dashboard":
             <div class="custom-metric-box {glow_class}">
                 <div class="label">Genel Kâr/Zarar</div>
                 <div class="value">{pnl_fmt}</div>
-                <div class="{delta_class}">{pct_fmt}</div>
+                <div class="delta-pos">{pct_fmt}</div>
             </div>
             """,
             unsafe_allow_html=True,
