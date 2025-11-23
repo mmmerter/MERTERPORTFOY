@@ -13,6 +13,60 @@ from utils import get_yahoo_symbol
 
 SHEET_NAME = "PortfoyData"
 
+# --- TARIHSEL VERI ÇEKME (YENI) ---
+@st.cache_data(ttl=3600) # 1 Saatlik Cache
+def get_historical_prices(symbols_map, period="1y"):
+    """
+    symbols_map: { 'Kod': 'Yahoo_Symbol', ... }
+    Returns: DataFrame with Date index and Columns as Symbols (Close prices)
+    """
+    if not symbols_map: return pd.DataFrame()
+    
+    # Yahoo Tickers
+    yahoo_symbols = [v for k, v in symbols_map.items() if v]
+    if not yahoo_symbols: return pd.DataFrame()
+    
+    try:
+        data = yf.download(yahoo_symbols, period=period, interval="1d", progress=False)['Close']
+        # Eger tek hisse varsa Series döner, DF'e cevir
+        if isinstance(data, pd.Series):
+            data = data.to_frame(name=yahoo_symbols[0])
+        
+        # Kolon adlarini bizim kodlarimizla eslestir (ters map)
+        reverse_map = {v: k for k, v in symbols_map.items()}
+        data.rename(columns=reverse_map, inplace=True)
+        
+        return data
+    except Exception as e:
+        print(f"History Fetch Error: {e}")
+        return pd.DataFrame()
+
+@st.cache_data(ttl=3600)
+def get_usd_try_history(period="1y"):
+    try:
+        df = yf.download("TRY=X", period=period, interval="1d", progress=False)['Close']
+        if isinstance(df, pd.Series): df = df.to_frame(name="TRY=X")
+        return df
+    except: return pd.DataFrame()
+
+@st.cache_data(ttl=14400)
+def get_fund_history(fund_code, period="1y"):
+    # TEFAS Fonu Tarihsel
+    try:
+        crawler = Crawler()
+        end = datetime.now()
+        if period == "1y": start = end - timedelta(days=365)
+        elif period == "6mo": start = end - timedelta(days=180)
+        else: start = end - timedelta(days=30)
+        
+        res = crawler.fetch(start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"), name=fund_code, columns=["Price"])
+        if not res.empty:
+            res.index = pd.to_datetime(res.index)
+            return res['Price']
+    except: pass
+    return pd.Series()
+
+# --- MEVCUT FONKSIYONLAR ---
 def get_data_from_sheet():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -67,15 +121,7 @@ def get_tefas_data(fund_code):
             match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
             if match: return float(match.group(1).replace(",", ".")), float(match.group(1).replace(",", "."))
     except: pass
-    try:
-        crawler = Crawler()
-        end = datetime.now().strftime("%Y-%m-%d")
-        start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        res = crawler.fetch(start=start, end=end, name=fund_code, columns=["Price"])
-        if not res.empty:
-            res = res.sort_index()
-            return float(res["Price"].iloc[-1]), float(res["Price"].iloc[-2])
-    except: pass
+    # Crawler fallback removed to keep simple, using history func for detailed charts
     return 0, 0
 
 @st.cache_data(ttl=300)
@@ -136,12 +182,10 @@ def get_tickers_data(df_portfolio, usd_try):
             if val: market_html += f"{val} &nbsp;|&nbsp; "
             if name == "ETH/USDT":
                 try:
-                    # 5d FIX
                     h = yahoo_data.tickers["GC=F"].history(period="5d")
                     if not h.empty: market_html += f'<span style="font-size: 22px; font-weight: 900; color: #bbbbff;">Gr Altın: </span><span style="color:white; font-size: 22px; font-weight: 900;">{(h["Close"].iloc[-1] * usd_try) / 31.1035:.2f}</span> &nbsp;|&nbsp; '
                 except: pass
                 try:
-                    # 5d FIX
                     h = yahoo_data.tickers["SI=F"].history(period="5d")
                     if not h.empty: market_html += f'<span style="font-size: 22px; font-weight: 900; color: #bbbbff;">Gr Gümüş: </span><span style="color:white; font-size: 22px; font-weight: 900;">{(h["Close"].iloc[-1] * usd_try) / 31.1035:.2f}</span> &nbsp;|&nbsp; '
                 except: pass
@@ -158,17 +202,5 @@ def get_tickers_data(df_portfolio, usd_try):
     
     return f'<div class="ticker-text animate-market">{market_html}</div>', f'<div class="ticker-text animate-portfolio">{portfolio_html}</div>'
 
-def get_binance_pnl_stats(exchange):
-    return 0,0,0,0 # Stub
-
-def get_binance_positions(api_key, api_secret):
-    try:
-        exchange = ccxt.binance({"apiKey": api_key, "secret": api_secret, "options": {"defaultType": "future"}})
-        balance = exchange.fetch_balance()
-        positions = exchange.fetch_positions()
-        active = []
-        for pos in positions:
-            if float(pos["info"]["positionAmt"]) != 0:
-                active.append({"Sembol": pos["symbol"], "Yön": "🟢" if float(pos["info"]["positionAmt"]) > 0 else "🔴", "PNL": float(pos["unrealizedPnl"])})
-        return {"wallet": balance["total"]["USDT"]}, pd.DataFrame(active)
-    except Exception as e: return None, str(e)
+def get_binance_pnl_stats(exchange): return 0,0,0,0 
+def get_binance_positions(api_key, api_secret): return None, "Vadeli kapalı"
