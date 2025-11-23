@@ -71,60 +71,141 @@ def render_pie_bar_charts(df, group_col, all_tab=False, varlik_gorunumu="YÜZDE 
     c2.plotly_chart(fig2, use_container_width=True)
 
 def get_historical_chart(df_portfolio, usd_try, gorunum_pb):
+    """
+    Portföyün tarihsel değerini hesaplar.
+    Gram Altın/Gümüş için Ons fiyatından çeviri yapar.
+    Nakit varlıkları (USD, TL) tarihsel kurla çarpar.
+    """
     if df_portfolio.empty: return None
     
-    symbol_map = {}
-    fund_map = []
+    # 1. Varlıkları Grupla
+    symbol_map = {} # Yahoo'dan çekilecekler (Hisse, Ons, Kripto)
+    fund_map = []   # Tefas fonları
+    cash_map = []   # Nakit (TL, USD, EUR)
     
     for _, row in df_portfolio.iterrows():
-        if "FON" in row["Pazar"]: fund_map.append((row["Kod"], row["Adet"]))
-        elif "VADELI" not in row["Pazar"]: 
-            s = get_yahoo_symbol(row["Kod"], row["Pazar"])
-            symbol_map[row["Kod"]] = s
+        kod = row["Kod"]
+        pazar = row["Pazar"]
+        adet = row["Adet"]
+        
+        if "FON" in pazar: 
+            fund_map.append((kod, adet))
+        elif "NAKIT" in pazar:
+            cash_map.append((kod, adet))
+        elif "VADELI" not in pazar: 
+            # Emtia (Gram) dahil buraya girer, utils.py'dan GC=F veya SI=F döner
+            s = get_yahoo_symbol(kod, pazar)
+            # Gram ayrımı için kod bilgisini sakla
+            symbol_map[kod] = {"symbol": s, "adet": adet, "pazar": pazar}
 
     try:
+        # Ana Tarihsel Veriler (USDTRY)
         usd_hist_df = get_usd_try_history()
         if usd_hist_df.empty: return None
         usd_hist = usd_hist_df["TRY=X"]
         
-        total_series = pd.Series(0, index=usd_hist.index)
+        # Toplam Serisi (Başlangıç 0)
+        total_series = pd.Series(0.0, index=usd_hist.index)
         
+        # --- A) YAHOO VARLIKLARI (Hisse, Kripto, Emtia) ---
         if symbol_map:
-            yh = get_historical_prices(symbol_map)
+            # Sadece sembolleri listele
+            unique_symbols = list(set([v["symbol"] for v in symbol_map.values()]))
+            
+            # Toplu Veri Çekme
+            # get_historical_prices fonksiyonu {Kod: Symbol} bekliyor, bizde yapı farklı.
+            # Manuel map oluştur:
+            fetch_map = {k: v["symbol"] for k, v in symbol_map.items()}
+            
+            yh = get_historical_prices(fetch_map)
+            
             if not yh.empty:
+                # Endeksleri eşitle
                 yh = yh.reindex(usd_hist.index).ffill()
-                for kod in yh.columns:
-                    # Güvenli erişim
-                    row_list = df_portfolio[df_portfolio["Kod"] == kod]
-                    if row_list.empty: continue
-                    row = row_list.iloc[0]
-                    
-                    adet = row["Adet"]
-                    pazar = row["Pazar"]
-                    price_series = yh[kod]
-                    val_series = price_series * adet
-                    
-                    is_try_asset = "BIST" in pazar or "FON" in pazar or "TL" in kod or "Gram" in kod
-                    if is_try_asset:
-                        if gorunum_pb == "USD": val_series = val_series / usd_hist
-                    else:
-                        if gorunum_pb == "TRY": val_series = val_series * usd_hist
-                    
-                    total_series = total_series.add(val_series, fill_value=0)
+                
+                for kod, info in symbol_map.items():
+                    if kod in yh.columns:
+                        price_series = yh[kod]
+                        adet = info["adet"]
+                        pazar = info["pazar"]
+                        
+                        # -- DEĞER HESAPLAMA --
+                        val_series = None
+                        
+                        # 1. Gram Altın / Gümüş Özel Hesabı
+                        if "Gram" in kod or "GRAM" in kod:
+                            # price_series şu an ONS fiyatı (USD)
+                            # Formül: (Ons * USDTRY) / 31.1035 -> Birim Fiyat (TL)
+                            gram_price_try = (price_series * usd_hist) / 31.1035
+                            
+                            if gorunum_pb == "TRY":
+                                val_series = gram_price_try * adet
+                            else: # USD Görünüm
+                                # TL Değer / USD Kuru = USD Değer
+                                # (Ons * USD / 31.1) * Adet / USD = Ons * Adet / 31.1
+                                val_series = (price_series / 31.1035) * adet
+                                
+                        # 2. Normal Varlıklar
+                        else:
+                            # Varlığın para birimi nedir?
+                            # BIST -> TRY, ABD/Kripto/Ons -> USD
+                            is_try_asset = "BIST" in pazar
+                            
+                            val_native = price_series * adet
+                            
+                            if is_try_asset:
+                                # Varlık TRY, Görünüm USD ise böl
+                                if gorunum_pb == "USD": 
+                                    val_series = val_native / usd_hist
+                                else:
+                                    val_series = val_native
+                            else:
+                                # Varlık USD, Görünüm TRY ise çarp
+                                if gorunum_pb == "TRY":
+                                    val_series = val_native * usd_hist
+                                else:
+                                    val_series = val_native
+                        
+                        if val_series is not None:
+                            total_series = total_series.add(val_series, fill_value=0)
 
+        # --- B) FONLAR ---
         for f, adet in fund_map:
             fh = get_fund_history(f)
             if not fh.empty:
                 fh = fh.reindex(usd_hist.index).ffill()
-                val = fh * adet
+                val = fh * adet # Fon fiyatı zaten TRY
                 if gorunum_pb == "USD": val = val / usd_hist
                 total_series = total_series.add(val, fill_value=0)
+                
+        # --- C) NAKİT (Düzeltilen Kısım) ---
+        for kod, adet in cash_map:
+            # Nakit miktarı sabit kabul edilir, tarihsel değer kurla değişir
+            if kod == "TL":
+                val = pd.Series(adet, index=usd_hist.index) # Hep sabit TL
+                if gorunum_pb == "USD": val = val / usd_hist
+                total_series = total_series.add(val, fill_value=0)
+            elif kod == "USD":
+                # 1000 USD her zaman 1000 USD'dir (USD görünümde).
+                # TRY görünümde: 1000 * Kur
+                if gorunum_pb == "TRY":
+                    val = usd_hist * adet
+                else:
+                    val = pd.Series(adet, index=usd_hist.index)
+                total_series = total_series.add(val, fill_value=0)
+            # EUR eklenebilir (EURTRY geçmişi gerekir)
         
         total_series = total_series.dropna()
         if total_series.empty: return None
         
+        # Grafik Çizimi
         fig = px.area(total_series, title=f"Portföy Değeri ({gorunum_pb}) - Son 1 Yıl")
-        fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=40, b=0))
+        fig.update_layout(
+            showlegend=False, 
+            margin=dict(l=0, r=0, t=40, b=0),
+            xaxis_title="",
+            yaxis_title=f"Değer ({gorunum_pb})"
+        )
         return fig
 
     except Exception as e:
@@ -134,8 +215,9 @@ def get_historical_chart(df_portfolio, usd_try, gorunum_pb):
 def render_pazar_tab(df, filter_key, symb, usd_try, varlik_gorunumu, total_spot_deger):
     if df.empty: return st.info("Veri yok.")
     
-    if filter_key == "Tümü": sub = df.copy()
-    else: sub = df[df["Pazar"].str.contains(filter_key, na=False)]
+    if filter_key == "VADELI": sub = df[df["Pazar"].str.contains("VADELI", na=False)]; is_vadeli=True
+    elif filter_key == "Tümü": sub = df.copy(); is_vadeli=False
+    else: sub = df[df["Pazar"].str.contains(filter_key, na=False)]; is_vadeli=False
 
     if sub.empty: return st.info("Yok.")
     
@@ -145,9 +227,6 @@ def render_pazar_tab(df, filter_key, symb, usd_try, varlik_gorunumu, total_spot_
     c1, c2 = st.columns(2)
     c1.metric("Toplam", f"{symb}{tv:,.0f}")
     
-    # Vadeli kontrolü (eski yapıdan kalan güvenli kontrol)
-    is_vadeli = "VADELI" in filter_key
-    
     if is_vadeli: c2.metric("PNL", f"{symb}{tp:,.0f}")
     else:
         tc = tv - tp
@@ -156,17 +235,21 @@ def render_pazar_tab(df, filter_key, symb, usd_try, varlik_gorunumu, total_spot_
     
     st.divider()
     
-    # --- TARIHSEL GRAFIK ---
+    # 1. GRAFİK SIRASI DEĞİŞTİRİLDİ: Önce Dağılım, Sonra Tarihsel
+    if not is_vadeli:
+        st.subheader(f"📊 {filter_key} Dağılımı")
+        render_pie_bar_charts(sub, "Kod", filter_key=="Tümü", varlik_gorunumu, total_spot_deger)
+        st.divider()
+    
+    # 2. TARIHSEL GRAFIK (ALTTA)
     st.subheader(f"📈 {filter_key} Tarihsel Değer")
     h_chart = get_historical_chart(sub, usd_try, "TRY" if symb=="₺" else "USD")
-    if h_chart: st.plotly_chart(h_chart, use_container_width=True)
+    if h_chart: 
+        st.plotly_chart(h_chart, use_container_width=True)
+    else:
+        st.info("Tarihsel veri hesaplanamıyor veya yetersiz.")
     
-    # --- DAĞILIM GRAFİĞİ ---
-    if not is_vadeli:
-        st.subheader(f"📊 {filter_key} Kod Bazlı Dağılım")
-        render_pie_bar_charts(sub, "Kod", filter_key=="Tümü", varlik_gorunumu, total_spot_deger)
-    
-    # Tablo Gösterimi
+    # 3. Tablo Gösterimi
     disp = sub.copy()
     if varlik_gorunumu == "YÜZDE (%)" and not is_vadeli:
         disp.rename(columns={"Değer": "Tutar"}, inplace=True)
@@ -177,4 +260,5 @@ def render_pazar_tab(df, filter_key, symb, usd_try, varlik_gorunumu, total_spot_
     st.dataframe(styled_dataframe(disp), use_container_width=True, hide_index=True)
 
 def render_detail_view(symbol, pazar):
+    # ... (Aynı)
     st.write(symbol)
