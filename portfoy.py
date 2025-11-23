@@ -27,7 +27,18 @@ from data_loader import (
     read_portfolio_history,
     write_portfolio_history,
     get_timeframe_changes,
+    read_history_bist,
+    write_history_bist,
+    read_history_abd,
+    write_history_abd,
+    read_history_fon,
+    write_history_fon,
+    read_history_emtia,
+    write_history_emtia,
+    read_history_nakit,
+    write_history_nakit,
 )
+
 from charts import (
     render_pie_bar_charts,
     render_pazar_tab,
@@ -727,7 +738,34 @@ elif selected == "Portföy":
                 "BIST", case=False, na=False
             )
         ]
-        render_kral_infobar(bist_df, sym)
+
+        # Haftalık / Aylık / YTD + sparkline için tarihsel log
+        timeframe_bist = None
+        if not bist_df.empty:
+            try:
+                t_v = float(bist_df["Değer"].sum())
+                if GORUNUM_PB == "TRY":
+                    total_try = t_v
+                    total_usd = t_v / USD_TRY if USD_TRY else 0.0
+                else:
+                    total_usd = t_v
+                    total_try = t_v * USD_TRY
+
+                write_history_bist(total_try, total_usd)
+                hist_bist = read_history_bist()
+                timeframe_bist = get_timeframe_changes(hist_bist)
+            except Exception:
+                timeframe_bist = None
+
+        render_kral_infobar(
+            bist_df,
+            sym,
+            gorunum_pb=GORUNUM_PB,
+            usd_try_rate=USD_TRY,
+            timeframe=timeframe_bist,
+            show_sparklines=True,
+        )
+
         render_pazar_tab(
             portfoy_only,
             "BIST",
@@ -741,12 +779,39 @@ elif selected == "Portföy":
         if hist_chart:
             st.plotly_chart(hist_chart, use_container_width=True)
 
+
     # ABD
     with tab_abd:
         abd_df = portfoy_only[
             portfoy_only["Pazar"].astype(str).str.contains("ABD", case=False, na=False)
         ]
-        render_kral_infobar(abd_df, sym)
+
+        timeframe_abd = None
+        if not abd_df.empty:
+            try:
+                t_v = float(abd_df["Değer"].sum())
+                if GORUNUM_PB == "TRY":
+                    total_try = t_v
+                    total_usd = t_v / USD_TRY if USD_TRY else 0.0
+                else:
+                    total_usd = t_v
+                    total_try = t_v * USD_TRY
+
+                write_history_abd(total_try, total_usd)
+                hist_abd = read_history_abd()
+                timeframe_abd = get_timeframe_changes(hist_abd)
+            except Exception:
+                timeframe_abd = None
+
+        render_kral_infobar(
+            abd_df,
+            sym,
+            gorunum_pb=GORUNUM_PB,
+            usd_try_rate=USD_TRY,
+            timeframe=timeframe_abd,
+            show_sparklines=True,
+        )
+
         render_pazar_tab(
             portfoy_only,
             "ABD",
@@ -760,12 +825,39 @@ elif selected == "Portföy":
         if hist_chart:
             st.plotly_chart(hist_chart, use_container_width=True)
 
+
     # FON
     with tab_fon:
         fon_df = portfoy_only[
             portfoy_only["Pazar"].astype(str).str.contains("FON", case=False, na=False)
         ]
-        render_kral_infobar(fon_df, sym)
+
+        timeframe_fon = None
+        if not fon_df.empty:
+            try:
+                t_v = float(fon_df["Değer"].sum())
+                if GORUNUM_PB == "TRY":
+                    total_try = t_v
+                    total_usd = t_v / USD_TRY if USD_TRY else 0.0
+                else:
+                    total_usd = t_v
+                    total_try = t_v * USD_TRY
+
+                write_history_fon(total_try, total_usd)
+                hist_fon = read_history_fon()
+                timeframe_fon = get_timeframe_changes(hist_fon)
+            except Exception:
+                timeframe_fon = None
+
+        render_kral_infobar(
+            fon_df,
+            sym,
+            gorunum_pb=GORUNUM_PB,
+            usd_try_rate=USD_TRY,
+            timeframe=timeframe_fon,
+            show_sparklines=True,
+        )
+
         render_pazar_tab(
             portfoy_only,
             "FON",
@@ -779,6 +871,7 @@ elif selected == "Portföy":
         if hist_chart:
             st.plotly_chart(hist_chart, use_container_width=True)
 
+
     # EMTIA
     with tab_emtia:
         emtia_df = portfoy_only[
@@ -786,7 +879,33 @@ elif selected == "Portföy":
                 "EMTIA", case=False, na=False
             )
         ]
-        render_kral_infobar(emtia_df, sym)
+
+        timeframe_emtia = None
+        if not emtia_df.empty:
+            try:
+                t_v = float(emtia_df["Değer"].sum())
+                if GORUNUM_PB == "TRY":
+                    total_try = t_v
+                    total_usd = t_v / USD_TRY if USD_TRY else 0.0
+                else:
+                    total_usd = t_v
+                    total_try = t_v * USD_TRY
+
+                write_history_emtia(total_try, total_usd)
+                hist_emtia = read_history_emtia()
+                timeframe_emtia = get_timeframe_changes(hist_emtia)
+            except Exception:
+                timeframe_emtia = None
+
+        render_kral_infobar(
+            emtia_df,
+            sym,
+            gorunum_pb=GORUNUM_PB,
+            usd_try_rate=USD_TRY,
+            timeframe=timeframe_emtia,
+            show_sparklines=True,
+        )
+
         render_pazar_tab(
             portfoy_only,
             "EMTIA",
@@ -799,6 +918,7 @@ elif selected == "Portföy":
         hist_chart = get_historical_chart(emtia_df, USD_TRY, GORUNUM_PB)
         if hist_chart:
             st.plotly_chart(hist_chart, use_container_width=True)
+
 
     # KRIPTO
     with tab_kripto:
@@ -828,7 +948,33 @@ elif selected == "Portföy":
                 "NAKIT", case=False, na=False
             )
         ]
-        render_kral_infobar(nakit_df, sym)
+
+        timeframe_nakit = None
+        if not nakit_df.empty:
+            try:
+                t_v = float(nakit_df["Değer"].sum())
+                if GORUNUM_PB == "TRY":
+                    total_try = t_v
+                    total_usd = t_v / USD_TRY if USD_TRY else 0.0
+                else:
+                    total_usd = t_v
+                    total_try = t_v * USD_TRY
+
+                write_history_nakit(total_try, total_usd)
+                hist_nakit = read_history_nakit()
+                timeframe_nakit = get_timeframe_changes(hist_nakit)
+            except Exception:
+                timeframe_nakit = None
+
+        render_kral_infobar(
+            nakit_df,
+            sym,
+            gorunum_pb=GORUNUM_PB,
+            usd_try_rate=USD_TRY,
+            timeframe=timeframe_nakit,
+            show_sparklines=True,
+        )
+
         render_pazar_tab(
             portfoy_only,
             "NAKIT",
