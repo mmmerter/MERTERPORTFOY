@@ -241,11 +241,16 @@ def render_pazar_tab(
     base = total_val - total_pnl
     pnl_pct = (total_pnl / base * 100) if base != 0 else 0.0
     daily_pnl = float(sub["Gün. Kâr/Zarar"].sum()) if "Gün. Kâr/Zarar" in sub.columns else 0.0
+    
+    # Günlük K/Z yüzdesi (günlük kâr/zararın toplam değere göre yüzdesi)
+    daily_pnl_pct = (daily_pnl / total_val * 100) if total_val != 0 else 0.0
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Toplam Değer", f"{sym}{total_val:,.0f}")
+    # Toplam Değer için: Toplam kâr/zarar yüzdesi (maliyete göre)
+    c1.metric("Toplam Değer", f"{sym}{total_val:,.0f}", delta=f"{pnl_pct:.2f}%")
     c2.metric("Toplam K/Z", f"{sym}{total_pnl:,.0f}", delta=f"{pnl_pct:.2f}%")
-    c3.metric("Günlük K/Z", f"{sym}{daily_pnl:,.0f}")
+    # Günlük K/Z için: Günlük kâr/zararın toplam değere göre yüzdesi
+    c3.metric("Günlük K/Z", f"{sym}{daily_pnl:,.0f}", delta=f"{daily_pnl_pct:.2f}%")
 
     st.divider()
 
