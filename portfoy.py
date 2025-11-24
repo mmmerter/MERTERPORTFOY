@@ -1,3 +1,83 @@
+elif selected == "Ekle/Çıkar":
+    st.header("Varlık Yönetimi")
+    tab1, tab2, tab3 = st.tabs(["Ekle", "Düzenle", "Sil/Sat"])
+
+    # EKLE
+    with tab1:
+        pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()))
+
+        # Seçilen pazara göre otomatik sembol listesi
+        semboller = MARKET_DATA.get(pazar, [])
+        kod_listeden = st.selectbox(
+            "Liste (yazıp arayabilirsin)",
+            options=["(Manuel giriş)"] + semboller,
+            index=0,
+        )
+
+        kod_manu = st.text_input("Kod (Örn: BTC, THYAO)").upper()
+
+        # Gerçek kullanılacak kod:
+        if kod_listeden != "(Manuel giriş)":
+            kod = kod_listeden
+        else:
+            kod = kod_manu
+
+        # Takip mi, portföy mü?
+        is_takip = st.checkbox("Sadece izleme listesine ekle (Takip)", value=False)
+
+        c1, c2 = st.columns(2)
+        # Takip modunda adet girmene gerek yok; içerde 1 olarak kaydediyoruz.
+        if is_takip:
+            adet_str = c1.text_input("Adet/Kontrat", "1", disabled=True)
+        else:
+            adet_str = c1.text_input("Adet/Kontrat", "0")
+
+        maliyet_str = c2.text_input("Giriş Fiyatı", "0")
+
+        if st.button("Kaydet"):
+            if not kod:
+                st.error("Kod boş olamaz.")
+            else:
+                m = smart_parse(maliyet_str)
+                if m <= 0:
+                    st.error("Giriş fiyatı pozitif olmalı.")
+                else:
+                    if is_takip:
+                        # Takip modunda adet = 1, Tip = Takip
+                        a = 1
+                        tip = "Takip"
+                    else:
+                        a = smart_parse(adet_str)
+                        tip = "Portfoy"
+                        if a <= 0:
+                            st.error("Adet pozitif olmalı.")
+                            st.stop()
+
+                    # Aynı kod + tip kombinasyonunu temizle (portföy/takip ayrı tutulur)
+                    portfoy_df = portfoy_df[
+                        ~((portfoy_df["Kod"] == kod) & (portfoy_df["Tip"] == tip))
+                    ]
+
+                    new_row = pd.DataFrame(
+                        {
+                            "Kod": [kod],
+                            "Pazar": [pazar],
+                            "Adet": [a],
+                            "Maliyet": [m],
+                            "Tip": [tip],
+                            "Notlar": [""],
+                        }
+                    )
+                    portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
+                    save_data_to_sheet(portfoy_df)
+
+                    if is_takip:
+                        st.success("İzleme listesine eklendi!")
+                    else:
+                        st.success("Portföye eklendi!")
+
+                    time.sleep(1)
+                    st.rerun()
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -1067,51 +1147,137 @@ elif selected == "Ekle/Çıkar":
     st.header("Varlık Yönetimi")
     tab1, tab2, tab3 = st.tabs(["Ekle", "Düzenle", "Sil/Sat"])
 
+elif selected == "Ekle/Çıkar":
+    st.header("Varlık Yönetimi")
+    tab1, tab2, tab3 = st.tabs(["Ekle", "Düzenle", "Sil/Sat"])
+
     # EKLE
     with tab1:
         pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()))
 
-        # Seçilen pazardaki mevcut varlıkları göster
-        try:
-            mevcut = portfoy_df[portfoy_df["Pazar"] == pazar]
-        except Exception:
-            mevcut = pd.DataFrame()
+        # Seçilen pazara göre otomatik sembol listesi
+        semboller = MARKET_DATA.get(pazar, [])
+        kod_listeden = st.selectbox(
+            "Liste (yazıp arayabilirsin)",
+            options=["(Manuel giriş)"] + semboller,
+            index=0,
+        )
 
-        if not mevcut.empty:
-            st.caption("Bu pazardaki mevcut varlıkların özeti:")
-            st.dataframe(
-                mevcut[["Kod", "Adet", "Maliyet"]].reset_index(drop=True),
-                use_container_width=True,
-                hide_index=True,
-            )
+        kod_manu = st.text_input("Kod (Örn: BTC, THYAO)").upper()
+
+        # Gerçek kullanılacak kod:
+        if kod_listeden != "(Manuel giriş)":
+            kod = kod_listeden
         else:
-            st.caption("Bu pazarda kayıtlı varlık yok.")
+            kod = kod_manu
 
-        kod = st.text_input("Kod (Örn: BTC, THYAO)").upper()
+        # Takip mi, portföy mü?
+        is_takip = st.checkbox("Sadece izleme listesine ekle (Takip)", value=False)
+
         c1, c2 = st.columns(2)
-        adet = c1.text_input("Adet/Kontrat", "0")
-        maliyet = c2.text_input("Giriş Fiyatı", "0")
+        # Takip modunda adet girmene gerek yok; içerde 1 olarak kaydediyoruz.
+        if is_takip:
+            adet_str = c1.text_input("Adet/Kontrat", "1", disabled=True)
+        else:
+            adet_str = c1.text_input("Adet/Kontrat", "0")
+
+        maliyet_str = c2.text_input("Giriş Fiyatı", "0")
+
         if st.button("Kaydet"):
-            a = smart_parse(adet)
-            m = smart_parse(maliyet)
-            if a <= 0 or m <= 0:
-                st.error("Adet ve maliyet pozitif olmalı.")
+            if not kod:
+                st.error("Kod boş olamaz.")
             else:
-                new_row = pd.DataFrame(
-                    {
-                        "Kod": [kod],
-                        "Pazar": [pazar],
-                        "Adet": [a],
-                        "Maliyet": [m],
-                        "Tip": ["SPOT"],
-                        "Notlar": [""],
-                    }
-                )
-                portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
-                save_data_to_sheet(portfoy_df)
-                st.success("Kaydedildi!")
-                time.sleep(1)
-                st.rerun()
+                m = smart_parse(maliyet_str)
+                if m <= 0:
+                    st.error("Giriş fiyatı pozitif olmalı.")
+                else:
+                    if is_takip:
+                        # Takip modunda adet = 1, Tip = Takip
+                        a = 1
+                        tip = "Takip"
+                    else:
+                        a = smart_parse(adet_str)
+                        tip = "Portfoy"
+                        if a <= 0:
+                            st.error("Adet pozitif olmalı.")
+                            st.stop()
+
+                    # Daha önce aynı Kod + Tip var mı?
+                    mask = (portfoy_df["Kod"] == kod) & (portfoy_df["Tip"] == tip)
+                    if mask.any():
+                        eski = portfoy_df[mask].iloc[0]
+                        eski_adet = smart_parse(eski["Adet"])
+                        eski_maliyet = smart_parse(eski["Maliyet"])
+
+                        if tip == "Portfoy":
+                            # Ağırlıklı ortalama maliyet + toplam adet
+                            toplam_adet = eski_adet + a
+                            if toplam_adet > 0:
+                                yeni_maliyet = (
+                                    eski_adet * eski_maliyet + a * m
+                                ) / toplam_adet
+                            else:
+                                yeni_maliyet = m
+
+                            a = toplam_adet
+                            m = yeni_maliyet
+                        else:
+                            # Takip satırında genelde son fiyatı baz almak mantıklı;
+                            # o yüzden adet = 1 bırakıyoruz, maliyeti güncelliyoruz.
+                            pass
+
+                        # Eski satırı temizle
+                        portfoy_df = portfoy_df[~mask]
+
+                    # Yeni (veya güncellenmiş) satırı ekle
+                    new_row = pd.DataFrame(
+                        {
+                            "Kod": [kod],
+                            "Pazar": [pazar],
+                            "Adet": [a],
+                            "Maliyet": [m],
+                            "Tip": [tip],
+                            "Notlar": [""],
+                        }
+                    )
+                    portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
+                    save_data_to_sheet(portfoy_df)
+
+                    if is_takip:
+                        st.success("İzleme listesine eklendi!")
+                    else:
+                        st.success("Portföye eklendi!")
+
+                    time.sleep(1)
+                    st.rerun()
+
+
+                    # Aynı kod + tip kombinasyonunu temizle (portföy/takip ayrı tutulur)
+                    portfoy_df = portfoy_df[
+                        ~((portfoy_df["Kod"] == kod) & (portfoy_df["Tip"] == tip))
+                    ]
+
+                    new_row = pd.DataFrame(
+                        {
+                            "Kod": [kod],
+                            "Pazar": [pazar],
+                            "Adet": [a],
+                            "Maliyet": [m],
+                            "Tip": [tip],
+                            "Notlar": [""],
+                        }
+                    )
+                    portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
+                    save_data_to_sheet(portfoy_df)
+
+                    if is_takip:
+                        st.success("İzleme listesine eklendi!")
+                    else:
+                        st.success("Portföye eklendi!")
+
+                    time.sleep(1)
+                    st.rerun()
+
 
             a = smart_parse(adet)
             m = smart_parse(maliyet)
