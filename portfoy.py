@@ -1143,9 +1143,6 @@ elif selected == "Satışlar":
     else:
         st.info("Satış kaydı yok.")
 
-elif selected == "Ekle/Çıkar":
-    st.header("Varlık Yönetimi")
-    tab1, tab2, tab3 = st.tabs(["Ekle", "Düzenle", "Sil/Sat"])
 
 elif selected == "Ekle/Çıkar":
     st.header("Varlık Yönetimi")
