@@ -122,7 +122,12 @@ st.markdown(
 
     @keyframes ticker-infinite {
         0% { transform: translate3d(0, 0, 0); }
-        100% { transform: translate3d(-100%, 0, 0); }
+        100% { transform: translate3d(-50%, 0, 0); }
+    }
+    
+    /* Sonsuz döngü için içeriği iki kez tekrarla */
+    .ticker-text::before {
+        content: attr(data-content);
     }
 
     /* Haber Kartları */
@@ -167,37 +172,43 @@ st.markdown(
         color: #b3b7c6;
     }
 
-    /* Mini Info Bar */
+    /* Mini Info Bar - Genişletilmiş */
     .kral-infobar {
         display: flex;
-        gap: 18px;
+        gap: 20px;
         flex-wrap: wrap;
-        margin-top: 6px;
-        margin-bottom: 10px;
+        margin-top: 8px;
+        margin-bottom: 12px;
+        width: 100%;
     }
     .kral-infobox {
         background: rgba(255, 255, 255, 0.02);
-        border-radius: 10px;
-        padding: 8px 14px;
+        border-radius: 12px;
+        padding: 12px 18px;
         border: 1px solid #303542;
-        min-width: 165px;
+        flex: 1;
+        min-width: 200px;
+        max-width: calc(20% - 16px);
     }
     .kral-infobox-label {
-        font-size: 11px;
+        font-size: 12px;
         color: #b0b3c0;
         text-transform: uppercase;
         letter-spacing: 0.06em;
+        font-weight: 700;
     }
     .kral-infobox-value {
         display: block;
-        margin-top: 2px;
-        font-size: 16px;
-        font-weight: 800;
+        margin-top: 4px;
+        font-size: 20px;
+        font-weight: 900;
         color: #ffffff;
+        line-height: 1.3;
     }
     .kral-infobox-sub {
         font-size: 11px;
         color: #9da1b3;
+        margin-top: 4px;
     }
 </style>
 """,
@@ -234,7 +245,7 @@ with st.container():
     c_title, c_toggle = st.columns([3, 1])
     with c_title:
         st.markdown(
-            "<div class='kral-header-title'>🏦 Merter'in Varlık Yönetim Terminali</div>",
+            "<div class='kral-header-title'>🏦 MERTER VARLIK TAKİP BOTU</div>",
             unsafe_allow_html=True,
         )
         st.markdown(

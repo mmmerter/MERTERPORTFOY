@@ -424,7 +424,11 @@ def get_tickers_data(df_portfolio, usd_try):
         else: portfolio_html += '<span style="color: #888; font-size: 14px;">Portföy boş.</span>'
     except: market_html, portfolio_html = "Yükleniyor...", "Yükleniyor..."
     
-    return f'<div class="ticker-text animate-market">{market_html}</div>', f'<div class="ticker-text animate-portfolio">{portfolio_html}</div>'
+    # Sonsuz döngü için içeriği iki kez tekrarla
+    market_html_doubled = market_html + " " + market_html
+    portfolio_html_doubled = portfolio_html + " " + portfolio_html
+    
+    return f'<div class="ticker-text animate-market">{market_html_doubled}</div>', f'<div class="ticker-text animate-portfolio">{portfolio_html_doubled}</div>'
 
 def get_binance_pnl_stats(exchange):
     return 0,0,0,0 # Stub
