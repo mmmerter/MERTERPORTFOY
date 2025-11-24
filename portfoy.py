@@ -1060,34 +1060,104 @@ if selected == "Dashboard":
             if map_mode == "Günlük Değişim %":
                 color_col = "Gün. %"
 
-            # Daha yumuşak renk skalası için simetrik aralık
+            # Modern renk skalası için simetrik aralık
             vmax = float(heat_df[color_col].max())
             vmin = float(heat_df[color_col].min())
             abs_max = max(abs(vmax), abs(vmin)) if (vmax or vmin) else 0
 
+            # Para birimi sembolü
+            currency_symbol = "₺" if GORUNUM_PB == "TRY" else "$"
+
+            # Modern treemap oluştur
             fig = px.treemap(
                 heat_df,
                 path=[px.Constant("Portföy"), "Kod"],
                 values="Değer",
                 color=color_col,
-                custom_data=["Değer", "Top. Kâr/Zarar", color_col],
-                color_continuous_scale="RdYlGn",
+                custom_data=["Değer", "Top. Kâr/Zarar", color_col, "Kod"],
+                color_continuous_scale="RdYlGn",  # Kırmızı-Sarı-Yeşil
                 color_continuous_midpoint=0,
+                hover_data={"Kod": True, "Değer": ":,.0f", color_col: ":.2f"},
             )
+            
+            # Renk aralığını ayarla
             if abs_max > 0:
-                fig.update_coloraxes(cmin=-abs_max, cmax=abs_max)
+                fig.update_coloraxes(
+                    cmin=-abs_max, 
+                    cmax=abs_max,
+                    colorscale="RdYlGn",
+                    colorbar=dict(
+                        title=dict(
+                            text="Performans %",
+                            font=dict(size=14, color="#ffffff", family="Inter, sans-serif")
+                        ),
+                        tickfont=dict(size=12, color="#ffffff", family="Inter, sans-serif"),
+                        thickness=20,
+                        len=0.8,
+                        x=1.02,
+                        xpad=10,
+                        bgcolor="rgba(0,0,0,0)",
+                        bordercolor="#2f3440",
+                        borderwidth=1,
+                    )
+                )
 
+            # Modern tipografi ve stil
             fig.update_traces(
                 textinfo="label+value+percent entry",
-                texttemplate="<b>%{label}</b><br>%{customdata[0]:,.0f}<br><b>%{customdata[2]:.2f}%</b>",
+                texttemplate="<b style='font-size:16px; font-family:Inter, sans-serif;'>%{label}</b><br>" +
+                            f"<span style='font-size:14px; color:#b0b3c0;'>%{{customdata[0]:,.0f}} {currency_symbol}</span><br>" +
+                            "<b style='font-size:15px; font-family:Inter, sans-serif;'>%{customdata[2]:+.2f}%</b>",
                 textposition="middle center",
-                textfont=dict(size=20, family="Arial Black"),
+                textfont=dict(
+                    size=16, 
+                    family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                    color="#ffffff"
+                ),
+                hovertemplate="<b style='font-size:16px;'>%{customdata[3]}</b><br>" +
+                             f"Değer: %{{customdata[0]:,.0f}} {currency_symbol}<br>" +
+                             f"Toplam K/Z: %{{customdata[1]:,.0f}} {currency_symbol}<br>" +
+                             "Performans: %{customdata[2]:+.2f}%<br>" +
+                             "<extra></extra>",
+                marker=dict(
+                    line=dict(
+                        width=2,
+                        color="#1a1c24"
+                    ),
+                    pad=dict(t=4, l=4, r=4, b=4),
+                    cornerradius=4,
+                ),
             )
+            
+            # Modern layout
             fig.update_layout(
-                margin=dict(t=0, l=0, r=0, b=0),
-                coloraxis_colorbar=dict(title="Top. / Gün. %"),
+                margin=dict(t=10, l=10, r=10, b=10),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(
+                    family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                    color="#ffffff",
+                    size=12
+                ),
+                height=600,
+                title=dict(
+                    text="",
+                    font=dict(size=18, color="#ffffff")
+                ),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            
+            st.plotly_chart(fig, use_container_width=True, config={
+                "displayModeBar": True,
+                "displaylogo": False,
+                "modeBarButtonsToRemove": ["pan2d", "lasso2d"],
+                "toImageButtonOptions": {
+                    "format": "png",
+                    "filename": "portfoy_heatmap",
+                    "height": 600,
+                    "width": 1200,
+                    "scale": 2
+                }
+            })
 
         st.divider()
 
