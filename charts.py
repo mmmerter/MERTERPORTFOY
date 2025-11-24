@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import yfinance as yf
 import pandas as pd
 
-from utils import styled_dataframe, get_yahoo_symbol
+from utils import styled_dataframe, get_yahoo_symbol, get_pazar_icon, get_label_with_icon, get_logo_html
 from data_loader import get_tefas_data
 
 
@@ -44,9 +44,13 @@ def render_pie_bar_charts(
 
     grouped["Pay (%)"] = grouped["Değer"] / denom * 100 if denom > 0 else 0
 
-    # Metin kolonları
+    # Metin kolonları - pazar ikonları ekle
     label_col = group_col
-    grouped["Label"] = grouped[label_col].astype(str)
+    if group_col == "Pazar":
+        # Pazar kolonu için ikonlar ekle
+        grouped["Label"] = grouped[label_col].apply(lambda x: get_label_with_icon(str(x), str(x)))
+    else:
+        grouped["Label"] = grouped[label_col].astype(str)
 
     # Modern renk paleti - profesyonel ve tutarlı
     modern_colors = [

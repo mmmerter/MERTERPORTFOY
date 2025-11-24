@@ -1,5 +1,6 @@
 import re
 import pandas as pd
+import streamlit as st
 
 ANALYSIS_COLS = [
     "Kod",
@@ -186,3 +187,89 @@ def styled_dataframe(df: pd.DataFrame):
             styler = styler.applymap(color_pnl, subset=[col])
 
     return styler
+
+
+def get_pnl_color_style(val):
+    """Kâr/Zarar değerine göre CSS style döndürür."""
+    try:
+        v = float(val)
+    except Exception:
+        return ""
+    if v > 0:
+        return "color: #00e676;"  # yeşil
+    elif v < 0:
+        return "color: #ff5252;"  # kırmızı
+    else:
+        return "color: #cccccc;"  # nötr gri
+
+
+def get_pazar_icon(pazar: str) -> str:
+    """
+    Pazar adına göre ikon/emoji döndürür.
+    Dashboard ve grafiklerde kullanılacak.
+    """
+    pazar_upper = str(pazar).upper()
+    
+    if "EMTIA" in pazar_upper:
+        return "⚡"  # Emtia ikonu
+    elif "NAKIT" in pazar_upper:
+        return "💵"  # Nakit ikonu
+    elif "ABD" in pazar_upper or "US" in pazar_upper:
+        return "🇺🇸"  # ABD bayrağı
+    elif "BIST" in pazar_upper:
+        return "📈"  # BIST ikonu
+    elif "FON" in pazar_upper:
+        return "📊"  # Fon ikonu
+    elif "KRIPTO" in pazar_upper:
+        return "₿"  # Kripto ikonu
+    else:
+        return "📌"  # Varsayılan
+
+
+@st.cache_data(ttl=86400)  # 24 saat cache - logolar çok sık değişmez
+def get_stock_logo_url(kod: str, pazar: str) -> str:
+    """
+    Şirket logosu URL'ini döndürür.
+    BIST için Paratic, ABD için alternatif kaynaklar kullanır.
+    Yeni şirketler eklendiğinde otomatik olarak logo URL'i oluşturulur.
+    """
+    kod = str(kod).upper().strip()
+    pazar_upper = str(pazar).upper()
+    
+    # BIST için Paratic logo URL'i
+    if "BIST" in pazar_upper:
+        # Paratic'in logo URL formatı: https://static.paratic.com/logolar/{KOD}.png
+        return f"https://static.paratic.com/logolar/{kod}.png"
+    
+    # ABD için Financial Modeling Prep veya alternatif
+    elif "ABD" in pazar_upper or "US" in pazar_upper:
+        # Financial Modeling Prep logo URL formatı
+        return f"https://financialmodelingprep.com/image-stock/{kod}.png"
+    
+    # Diğer pazarlar için varsayılan (boş string döner, ikon kullanılır)
+    return ""
+
+
+def get_logo_html(kod: str, pazar: str, size: int = 24) -> str:
+    """
+    Logo için HTML img tag'i döndürür.
+    Treemap ve diğer grafiklerde kullanılacak.
+    Logo bulunamazsa boş string döner.
+    """
+    logo_url = get_stock_logo_url(kod, pazar)
+    if not logo_url:
+        return ""
+    
+    # HTML img tag'i - hata durumunda gizlenir
+    return f'<img src="{logo_url}" style="width:{size}px;height:{size}px;vertical-align:middle;margin-right:4px;border-radius:4px;object-fit:contain;" onerror="this.style.display=\'none\'" />'
+
+
+def get_label_with_icon(label: str, pazar: str = "") -> str:
+    """
+    Label'a pazar ikonu ekler.
+    Pasta ve bar chart'larda kullanılacak.
+    """
+    icon = get_pazar_icon(pazar) if pazar else ""
+    if icon:
+        return f"{icon} {label}"
+    return label
