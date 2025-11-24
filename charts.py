@@ -509,7 +509,7 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
     başlangıç_değeri = hist_df["ToplamDeğer"].iloc[0]
     son_değer = hist_df["ToplamDeğer"].iloc[-1]
     toplam_değişim = son_değer - başlangıç_değeri
-    toplam_değişim_pct = ((son_değer - başlangıç_değer) / başlangıç_değer * 100) if başlangıç_değer > 0 else 0
+    toplam_değişim_pct = ((son_değer - başlangıç_değeri) / başlangıç_değeri * 100) if başlangıç_değeri > 0 else 0
     
     # Min ve Max değerler
     min_değer = hist_df["ToplamDeğer"].min()
@@ -572,7 +572,7 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
             font=dict(color="#ffffff", size=10, family="Inter, sans-serif"),
         )
     
-    if max_değer > başlangıç_değer * 1.05:  # Sadece önemli yükselişlerde göster
+    if max_değer > başlangıç_değeri * 1.05:  # Sadece önemli yükselişlerde göster
         fig.add_annotation(
             x=max_tarih,
             y=max_değer,
