@@ -500,16 +500,144 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
 
     hist_df = portfolio_series.reset_index()
     hist_df.columns = ["Tarih", "ToplamDeğer"]
-
-    fig = px.line(
-        hist_df,
-        x="Tarih",
-        y="ToplamDeğer",
-        title="Portföy Değeri (60 Gün)",
+    
+    # Günlük değişim ve yüzde değişim hesapla
+    hist_df["GünlükDeğişim"] = hist_df["ToplamDeğer"].diff()
+    hist_df["GünlükDeğişim%"] = (hist_df["ToplamDeğer"].pct_change() * 100).fillna(0)
+    
+    # Başlangıç değeri (ilk gün)
+    başlangıç_değeri = hist_df["ToplamDeğer"].iloc[0]
+    son_değer = hist_df["ToplamDeğer"].iloc[-1]
+    toplam_değişim = son_değer - başlangıç_değeri
+    toplam_değişim_pct = ((son_değer - başlangıç_değer) / başlangıç_değer * 100) if başlangıç_değer > 0 else 0
+    
+    # Min ve Max değerler
+    min_değer = hist_df["ToplamDeğer"].min()
+    max_değer = hist_df["ToplamDeğer"].max()
+    min_tarih = hist_df.loc[hist_df["ToplamDeğer"].idxmin(), "Tarih"]
+    max_tarih = hist_df.loc[hist_df["ToplamDeğer"].idxmax(), "Tarih"]
+    
+    # Para birimi sembolü
+    currency_symbol = "₺" if pb == "TRY" else "$"
+    
+    # Modern grafik oluştur - Area chart ile gradient fill
+    fig = go.Figure()
+    
+    # Area chart (gradient fill ile)
+    fig.add_trace(
+        go.Scatter(
+            x=hist_df["Tarih"],
+            y=hist_df["ToplamDeğer"],
+            mode="lines",
+            name="Portföy Değeri",
+            fill="tonexty",
+            fillcolor="rgba(107, 127, 215, 0.2)",  # Gradient fill için başlangıç
+            line=dict(
+                color="#6b7fd7",
+                width=3,
+                shape="spline",  # Yumuşak çizgiler
+            ),
+            hovertemplate="<b style='font-family: Inter, sans-serif; font-size: 14px;'>%{x|%d %b %Y}</b><br>" +
+                         f"<span style='color: #6b7fd7;'>Değer:</span> <b>{currency_symbol}%{{y:,.0f}}</b><br>" +
+                         "<span style='color: #6b7fd7;'>Günlük Değişim:</span> <b>%{customdata[0]:+,.0f}</b><br>" +
+                         "<span style='color: #6b7fd7;'>Günlük Değişim %:</span> <b>%{customdata[1]:+.2f}%</b><extra></extra>",
+            customdata=hist_df[["GünlükDeğişim", "GünlükDeğişim%"]].values,
+        )
     )
+    
+    # Başlangıç çizgisi (dikey)
+    fig.add_vline(
+        x=hist_df["Tarih"].iloc[0],
+        line_dash="dash",
+        line_color="#9da1b3",
+        line_width=1,
+        opacity=0.5,
+        annotation_text=f"Başlangıç: {currency_symbol}{başlangıç_değeri:,.0f}",
+        annotation_position="top left",
+        annotation_font_size=10,
+        annotation_font_color="#9da1b3",
+    )
+    
+    # Min ve Max noktaları (annotation ile)
+    if min_değer < başlangıç_değeri * 0.95:  # Sadece önemli düşüşlerde göster
+        fig.add_annotation(
+            x=min_tarih,
+            y=min_değer,
+            text=f"Min: {currency_symbol}{min_değer:,.0f}",
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor="#ff5252",
+            bgcolor="rgba(255, 82, 82, 0.8)",
+            bordercolor="#ff5252",
+            font=dict(color="#ffffff", size=10, family="Inter, sans-serif"),
+        )
+    
+    if max_değer > başlangıç_değer * 1.05:  # Sadece önemli yükselişlerde göster
+        fig.add_annotation(
+            x=max_tarih,
+            y=max_değer,
+            text=f"Max: {currency_symbol}{max_değer:,.0f}",
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor="#00e676",
+            bgcolor="rgba(0, 230, 118, 0.8)",
+            bordercolor="#00e676",
+            font=dict(color="#ffffff", size=10, family="Inter, sans-serif"),
+        )
+    
+    # Modern layout
     fig.update_layout(
-        margin=dict(t=30, b=0, l=0, r=0),
-        xaxis_title="Tarih",
-        yaxis_title=f"Portföy ({'₺' if pb == 'TRY' else '$'})",
+        title=dict(
+            text=f"<b>Portföy Değeri (60 Gün)</b><br><span style='font-size: 12px; color: #9da1b3;'>Toplam Değişim: {currency_symbol}{toplam_değişim:+,.0f} ({toplam_değişim_pct:+.2f}%)</span>",
+            font=dict(
+                family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                size=18,
+                color="#ffffff",
+            ),
+            x=0.5,
+            xanchor="center",
+        ),
+        margin=dict(t=80, b=40, l=60, r=40),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title="",
+            showgrid=True,
+            gridcolor="rgba(255,255,255,0.05)",
+            gridwidth=1,
+            tickfont=dict(
+                family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                size=11,
+                color="#9da1b3",
+            ),
+            showline=True,
+            linecolor="rgba(255,255,255,0.1)",
+            linewidth=1,
+        ),
+        yaxis=dict(
+            title=dict(
+                text=f"Portföy Değeri ({currency_symbol})",
+                font=dict(
+                    family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                    size=12,
+                    color="#9da1b3",
+                ),
+            ),
+            showgrid=True,
+            gridcolor="rgba(255,255,255,0.05)",
+            gridwidth=1,
+            tickfont=dict(
+                family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                size=11,
+                color="#9da1b3",
+            ),
+            showline=True,
+            linecolor="rgba(255,255,255,0.1)",
+            linewidth=1,
+        ),
+        hovermode="x unified",
+        height=450,
+        showlegend=False,
     )
+    
     return fig
