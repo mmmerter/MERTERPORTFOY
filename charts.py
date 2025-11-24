@@ -514,19 +514,8 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
     # Min ve Max değerler
     min_değer = hist_df["ToplamDeğer"].min()
     max_değer = hist_df["ToplamDeğer"].max()
-    min_tarih_raw = hist_df.loc[hist_df["ToplamDeğer"].idxmin(), "Tarih"]
-    max_tarih_raw = hist_df.loc[hist_df["ToplamDeğer"].idxmax(), "Tarih"]
-    
-    # Pandas Timestamp'leri string'e çevir (Plotly için)
-    if hasattr(min_tarih_raw, 'strftime'):
-        min_tarih = min_tarih_raw.strftime('%Y-%m-%d')
-    else:
-        min_tarih = str(min_tarih_raw)
-    
-    if hasattr(max_tarih_raw, 'strftime'):
-        max_tarih = max_tarih_raw.strftime('%Y-%m-%d')
-    else:
-        max_tarih = str(max_tarih_raw)
+    min_tarih = hist_df.loc[hist_df["ToplamDeğer"].idxmin(), "Tarih"]
+    max_tarih = hist_df.loc[hist_df["ToplamDeğer"].idxmax(), "Tarih"]
     
     # Para birimi sembolü
     currency_symbol = "₺" if pb == "TRY" else "$"
@@ -556,24 +545,35 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
         )
     )
     
-    # Başlangıç çizgisi (dikey)
+    # Başlangıç çizgisi (dikey) - add_shape kullan
     başlangıç_tarih = hist_df["Tarih"].iloc[0]
-    # Pandas Timestamp'i string'e çevir (Plotly için)
-    if hasattr(başlangıç_tarih, 'strftime'):
-        başlangıç_tarih_str = başlangıç_tarih.strftime('%Y-%m-%d')
-    else:
-        başlangıç_tarih_str = str(başlangıç_tarih)
-    
-    fig.add_vline(
-        x=başlangıç_tarih_str,
-        line_dash="dash",
-        line_color="#9da1b3",
-        line_width=1,
+    fig.add_shape(
+        type="line",
+        x0=başlangıç_tarih,
+        x1=başlangıç_tarih,
+        y0=0,
+        y1=1,
+        yref="paper",
+        line=dict(
+            color="#9da1b3",
+            width=1,
+            dash="dash",
+        ),
         opacity=0.5,
-        annotation_text=f"Başlangıç: {currency_symbol}{başlangıç_değeri:,.0f}",
-        annotation_position="top left",
-        annotation_font_size=10,
-        annotation_font_color="#9da1b3",
+    )
+    
+    # Başlangıç annotation'ı
+    fig.add_annotation(
+        x=başlangıç_tarih,
+        y=başlangıç_değeri,
+        text=f"Başlangıç: {currency_symbol}{başlangıç_değeri:,.0f}",
+        showarrow=True,
+        arrowhead=2,
+        arrowcolor="#9da1b3",
+        bgcolor="rgba(157, 161, 179, 0.8)",
+        bordercolor="#9da1b3",
+        font=dict(color="#ffffff", size=10, family="Inter, sans-serif"),
+        xanchor="right",
     )
     
     # Min ve Max noktaları (annotation ile)
