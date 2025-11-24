@@ -834,6 +834,20 @@ takip_only = master_df[master_df["Tip"] == "Takip"]
 
 # --- GLOBAL INFO BAR ---
 
+# Kâr/Zarar göstergesi için yardımcı fonksiyon
+def get_pnl_indicator(pct_value):
+    """Yüzde değerine göre kırmızı/yeşil nokta döndürür"""
+    try:
+        pct = float(pct_value)
+        if pct > 0:
+            return '<span style="color: #00e676; font-size: 16px;">🟢</span>'
+        elif pct < 0:
+            return '<span style="color: #ff5252; font-size: 16px;">🔴</span>'
+        else:
+            return '<span style="color: #888; font-size: 16px;">⚪</span>'
+    except:
+        return '<span style="color: #888; font-size: 16px;">⚪</span>'
+
 # --- GLOBAL INFO BAR ---
 def render_kral_infobar(df, sym, gorunum_pb=None, usd_try_rate=None, timeframe=None, show_sparklines=False):
     """
@@ -864,6 +878,7 @@ def render_kral_infobar(df, sym, gorunum_pb=None, usd_try_rate=None, timeframe=N
     ytd_txt = "—"
 
     # Timeframe verisi geldiyse gerçek rakamlarla doldur
+    w_pct, m_pct, y_pct = 0, 0, 0
     if timeframe is not None:
         try:
             w_val, w_pct = timeframe.get("weekly", (0, 0))
@@ -902,17 +917,17 @@ def render_kral_infobar(df, sym, gorunum_pb=None, usd_try_rate=None, timeframe=N
             </div>
             <div class="kral-infobox">
                 <div class="kral-infobox-label">Haftalık K/Z</div>
-                <span class="kral-infobox-value">{weekly_txt}</span>
+                <span class="kral-infobox-value">{get_pnl_indicator(w_pct)} {weekly_txt}</span>
                 <div class="kral-infobox-sub">Son 7 güne göre</div>
             </div>
             <div class="kral-infobox">
                 <div class="kral-infobox-label">Aylık K/Z</div>
-                <span class="kral-infobox-value">{monthly_txt}</span>
+                <span class="kral-infobox-value">{get_pnl_indicator(m_pct)} {monthly_txt}</span>
                 <div class="kral-infobox-sub">Son 30 güne göre</div>
             </div>
             <div class="kral-infobox">
                 <div class="kral-infobox-label">YTD Performans</div>
-                <span class="kral-infobox-value">{ytd_txt}</span>
+                <span class="kral-infobox-value">{get_pnl_indicator(y_pct)} {ytd_txt}</span>
                 <div class="kral-infobox-sub">Yılbaşından bugüne</div>
             </div>
         </div>
@@ -1492,10 +1507,11 @@ elif selected == "Haberler":
 elif selected == "İzleme":
     st.subheader("👁️ İzleme Listesi")
     if not takip_only.empty:
-        # İzleme listesi için sadece: Kod, Pazar, Fiyat, Fiyat Değişimi %
-        takip_display = takip_only[["Kod", "Pazar", "Fiyat", "Günlük Değişim %"]].copy()
-        takip_display = takip_display.rename(columns={"Günlük Değişim %": "Fiyat Değişimi %"})
+        # İzleme listesi için: Kod, Pazar, Maliyet (eklediğindeki fiyat), Fiyat (güncel), Değişim %
+        takip_display = takip_only[["Kod", "Pazar", "Maliyet", "Fiyat", "Top. %"]].copy()
+        takip_display = takip_display.rename(columns={"Top. %": "Değişim %"})
         
+        # styled_dataframe zaten "Değişim %" kolonunu renklendirecek (utils.py'deki color_pnl fonksiyonu sayesinde)
         st.dataframe(
             styled_dataframe(takip_display),
             use_container_width=True,

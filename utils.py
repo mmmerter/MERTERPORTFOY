@@ -183,6 +183,7 @@ def styled_dataframe(df: pd.DataFrame):
         "Top. %",
         "Gün. Kâr/Zarar",
         "Kâr/Zarar",
+        "Değişim %",  # İzleme listesi için
     ]
     for col in pnl_cols:
         if col in df.columns:
