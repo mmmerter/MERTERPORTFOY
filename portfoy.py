@@ -292,9 +292,9 @@ selected = option_menu(
 
 
 # --- ANALİZ ---
-@st.cache_data(ttl=60)
-def _fetch_batch_prices(symbols_list, period="2d"):
-    """Batch olarak fiyat verilerini çeker - borsa kapalıyken de son kapanış fiyatını döndürür"""
+@st.cache_data(ttl=300)  # 5 dakika cache - BIST ve ABD için
+def _fetch_batch_prices_bist_abd(symbols_list, period="5d"):
+    """Batch olarak BIST ve ABD fiyat verilerini çeker - borsa kapalıyken de son kapanış fiyatını döndürür"""
     if not symbols_list:
         return {}
     prices = {}
@@ -342,6 +342,98 @@ def _fetch_batch_prices(symbols_list, period="2d"):
             try:
                 ticker = yf.Ticker(sym)
                 h = ticker.history(period="5d")
+                if not h.empty:
+                    curr = h["Close"].iloc[-1]
+                    prev = h["Close"].iloc[-2] if len(h) > 1 else curr
+                    prices[sym] = {"curr": curr, "prev": prev}
+                else:
+                    prices[sym] = {"curr": 0, "prev": 0}
+            except Exception:
+                prices[sym] = {"curr": 0, "prev": 0}
+    
+    return prices
+
+@st.cache_data(ttl=120)  # 2 dakika cache - Kripto için
+def _fetch_batch_prices_crypto(symbols_list, period="5d"):
+    """Batch olarak Kripto fiyat verilerini çeker"""
+    if not symbols_list:
+        return {}
+    prices = {}
+    
+    try:
+        tickers = yf.Tickers(" ".join(symbols_list))
+        for sym in symbols_list:
+            try:
+                h = tickers.tickers[sym].history(period=period)
+                if not h.empty:
+                    curr = h["Close"].iloc[-1]
+                    prev = h["Close"].iloc[-2] if len(h) > 1 else curr
+                    prices[sym] = {"curr": curr, "prev": prev}
+                else:
+                    prices[sym] = {"curr": 0, "prev": 0}
+            except Exception:
+                try:
+                    ticker = yf.Ticker(sym)
+                    h = ticker.history(period=period)
+                    if not h.empty:
+                        curr = h["Close"].iloc[-1]
+                        prev = h["Close"].iloc[-2] if len(h) > 1 else curr
+                        prices[sym] = {"curr": curr, "prev": prev}
+                    else:
+                        prices[sym] = {"curr": 0, "prev": 0}
+                except Exception:
+                    prices[sym] = {"curr": 0, "prev": 0}
+    except Exception:
+        for sym in symbols_list:
+            try:
+                ticker = yf.Ticker(sym)
+                h = ticker.history(period=period)
+                if not h.empty:
+                    curr = h["Close"].iloc[-1]
+                    prev = h["Close"].iloc[-2] if len(h) > 1 else curr
+                    prices[sym] = {"curr": curr, "prev": prev}
+                else:
+                    prices[sym] = {"curr": 0, "prev": 0}
+            except Exception:
+                prices[sym] = {"curr": 0, "prev": 0}
+    
+    return prices
+
+@st.cache_data(ttl=300)  # 5 dakika cache - EMTIA için
+def _fetch_batch_prices_emtia(symbols_list, period="5d"):
+    """Batch olarak EMTIA fiyat verilerini çeker"""
+    if not symbols_list:
+        return {}
+    prices = {}
+    
+    try:
+        tickers = yf.Tickers(" ".join(symbols_list))
+        for sym in symbols_list:
+            try:
+                h = tickers.tickers[sym].history(period=period)
+                if not h.empty:
+                    curr = h["Close"].iloc[-1]
+                    prev = h["Close"].iloc[-2] if len(h) > 1 else curr
+                    prices[sym] = {"curr": curr, "prev": prev}
+                else:
+                    prices[sym] = {"curr": 0, "prev": 0}
+            except Exception:
+                try:
+                    ticker = yf.Ticker(sym)
+                    h = ticker.history(period=period)
+                    if not h.empty:
+                        curr = h["Close"].iloc[-1]
+                        prev = h["Close"].iloc[-2] if len(h) > 1 else curr
+                        prices[sym] = {"curr": curr, "prev": prev}
+                    else:
+                        prices[sym] = {"curr": 0, "prev": 0}
+                except Exception:
+                    prices[sym] = {"curr": 0, "prev": 0}
+    except Exception:
+        for sym in symbols_list:
+            try:
+                ticker = yf.Ticker(sym)
+                h = ticker.history(period=period)
                 if not h.empty:
                     curr = h["Close"].iloc[-1]
                     prev = h["Close"].iloc[-2] if len(h) > 1 else curr
@@ -419,9 +511,11 @@ def run_analysis(df, usd_try_rate, view_currency):
         sector_info = _fetch_sector_info(sector_symbols)
         df_work.loc[bist_abd_mask, "Sektör"] = df_work[bist_abd_mask]["Symbol"].map(sector_info).fillna("Bilinmiyor")
     
-    # Fiyat verilerini batch olarak çek
-    yahoo_symbols = []
-    symbol_map = {}  # kod -> symbol mapping
+    # Fiyat verilerini batch olarak çek - varlık türüne göre ayrı cache
+    bist_abd_symbols = []
+    crypto_symbols = []
+    emtia_symbols = []
+    symbol_map = {}  # idx -> (symbol, asset_type) mapping
     
     for idx, row in df_work.iterrows():
         kod = row["Kod"]
@@ -433,24 +527,54 @@ def run_analysis(df, usd_try_rate, view_currency):
         elif "FON" in pazar:
             continue  # Fonlar özel işlenecek
         elif "Gram Gümüş" in kod or "GRAM GÜMÜŞ" in kod:
-            if "SI=F" not in yahoo_symbols:
-                yahoo_symbols.append("SI=F")
-            symbol_map[idx] = "SI=F"
+            if "SI=F" not in emtia_symbols:
+                emtia_symbols.append("SI=F")
+            symbol_map[idx] = ("SI=F", "EMTIA")
         elif "Gram Altın" in kod or "GRAM ALTIN" in kod:
-            if "GC=F" not in yahoo_symbols:
-                yahoo_symbols.append("GC=F")
-            symbol_map[idx] = "GC=F"
+            if "GC=F" not in emtia_symbols:
+                emtia_symbols.append("GC=F")
+            symbol_map[idx] = ("GC=F", "EMTIA")
+        elif "KRIPTO" in pazar.upper():
+            if symbol not in crypto_symbols:
+                crypto_symbols.append(symbol)
+            symbol_map[idx] = (symbol, "KRIPTO")
+        elif "BIST" in pazar.upper() or "ABD" in pazar.upper():
+            if symbol not in bist_abd_symbols:
+                bist_abd_symbols.append(symbol)
+            symbol_map[idx] = (symbol, "BIST_ABD")
+        elif "EMTIA" in pazar.upper():
+            if symbol not in emtia_symbols:
+                emtia_symbols.append(symbol)
+            symbol_map[idx] = (symbol, "EMTIA")
         else:
-            if symbol not in yahoo_symbols:
-                yahoo_symbols.append(symbol)
-            symbol_map[idx] = symbol
+            # Varsayılan olarak BIST/ABD gibi işle
+            if symbol not in bist_abd_symbols:
+                bist_abd_symbols.append(symbol)
+            symbol_map[idx] = (symbol, "BIST_ABD")
     
-    # Batch fiyat çekme - borsa kapalıyken de çalışması için period'u artır
-    batch_prices = _fetch_batch_prices(yahoo_symbols, period="5d")
+    # Varlık türüne göre farklı cache süreleri ile fiyat çekme
+    batch_prices = {}
+    
+    # BIST ve ABD: 5 dakika cache, borsa kapalıyken de çalışır
+    if bist_abd_symbols:
+        bist_abd_prices = _fetch_batch_prices_bist_abd(bist_abd_symbols, period="5d")
+        batch_prices.update(bist_abd_prices)
+    
+    # Kripto: 2 dakika cache
+    if crypto_symbols:
+        crypto_prices = _fetch_batch_prices_crypto(crypto_symbols, period="5d")
+        batch_prices.update(crypto_prices)
+    
+    # EMTIA: 5 dakika cache
     gram_prices_5d = {}
-    if "SI=F" in yahoo_symbols or "GC=F" in yahoo_symbols:
-        gram_batch = _fetch_batch_prices(["SI=F", "GC=F"], period="5d")
-        gram_prices_5d = gram_batch
+    if emtia_symbols:
+        emtia_prices = _fetch_batch_prices_emtia(emtia_symbols, period="5d")
+        batch_prices.update(emtia_prices)
+        # Gram altın/gümüş için özel mapping
+        if "SI=F" in emtia_prices:
+            gram_prices_5d["SI=F"] = emtia_prices["SI=F"]
+        if "GC=F" in emtia_prices:
+            gram_prices_5d["GC=F"] = emtia_prices["GC=F"]
     
     # EURTRY için özel - borsa kapalıyken de çalışması için period artır
     eurtry_price = None
@@ -500,6 +624,16 @@ def run_analysis(df, usd_try_rate, view_currency):
                 prev = curr
             elif "FON" in pazar:
                 curr, prev = get_tefas_data(kod)
+                # Eğer fiyat 0 ise veya maliyetten çok farklıysa (muhtemelen yanlış), logla
+                if curr == 0:
+                    # Fiyat çekilemedi - maliyet kullanılacak
+                    pass
+                elif maliyet > 0 and curr > 0:
+                    # Fiyat maliyetten %500'den fazla farklıysa şüpheli
+                    ratio = abs(curr - maliyet) / maliyet
+                    if ratio > 5:
+                        # Şüpheli fiyat - ama yine de kullan, belki gerçekten değişmiştir
+                        pass
             elif "Gram Gümüş" in kod or "GRAM GÜMÜŞ" in kod:
                 if "SI=F" in gram_prices_5d:
                     p_data = gram_prices_5d["SI=F"]
@@ -511,8 +645,8 @@ def run_analysis(df, usd_try_rate, view_currency):
                     curr = (p_data["curr"] * usd_try_rate) / 31.1035
                     prev = (p_data["prev"] * usd_try_rate) / 31.1035
             else:
-                if symbol in symbol_map:
-                    sym_key = symbol_map[idx]
+                if idx in symbol_map:
+                    sym_key, asset_type = symbol_map[idx]
                     if sym_key in batch_prices:
                         p_data = batch_prices[sym_key]
                         curr = p_data["curr"]
@@ -526,8 +660,14 @@ def run_analysis(df, usd_try_rate, view_currency):
                                 curr = h["Close"].iloc[-1]
                                 prev = h["Close"].iloc[-2] if len(h) > 1 else curr
                             else:
-                                curr = 0
-                                prev = 0
+                                # Daha uzun period dene
+                                h = ticker.history(period="1mo")
+                                if not h.empty:
+                                    curr = h["Close"].iloc[-1]
+                                    prev = h["Close"].iloc[-2] if len(h) > 1 else curr
+                                else:
+                                    curr = 0
+                                    prev = 0
                         except Exception:
                             curr = 0
                             prev = 0
@@ -540,8 +680,14 @@ def run_analysis(df, usd_try_rate, view_currency):
                             curr = h["Close"].iloc[-1]
                             prev = h["Close"].iloc[-2] if len(h) > 1 else curr
                         else:
-                            curr = 0
-                            prev = 0
+                            # Daha uzun period dene
+                            h = ticker.history(period="1mo")
+                            if not h.empty:
+                                curr = h["Close"].iloc[-1]
+                                prev = h["Close"].iloc[-2] if len(h) > 1 else curr
+                            else:
+                                curr = 0
+                                prev = 0
                     except Exception:
                         curr = 0
                         prev = 0

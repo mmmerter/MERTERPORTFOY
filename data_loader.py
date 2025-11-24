@@ -86,29 +86,81 @@ def add_sale_record(date, code, market, qty, price, cost, profit):
     except Exception:
         pass
 
-@st.cache_data(ttl=3600)  # 1 saat cache - fon fiyatları gün içinde çok değişmez
+@st.cache_data(ttl=7200)  # 2 saat cache - TEFAS fon fiyatları gün içinde çok değişmez
 def get_tefas_data(fund_code):
-    try:
-        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=5)
-        if r.status_code == 200:
-            match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
-            if match: 
-                price = float(match.group(1).replace(",", "."))
-                return price, price
-    except Exception:
-        pass
+    """
+    TEFAS fon fiyatını çeker. Önce tefas-crawler kullanır, başarısız olursa web scraping dener.
+    """
+    fund_code = str(fund_code).upper().strip()
+    
+    # Önce tefas-crawler ile dene (daha güvenilir)
     try:
         crawler = Crawler()
         end = datetime.now().strftime("%Y-%m-%d")
         start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
         res = crawler.fetch(start=start, end=end, name=fund_code, columns=["Price"])
-        if not res.empty:
+        if not res.empty and len(res) > 0:
             res = res.sort_index()
-            return float(res["Price"].iloc[-1]), float(res["Price"].iloc[-2])
+            curr_price = float(res["Price"].iloc[-1])
+            prev_price = float(res["Price"].iloc[-2]) if len(res) > 1 else curr_price
+            if curr_price > 0:
+                return curr_price, prev_price
+    except Exception as e:
+        # Hata olursa sessizce geç, web scraping'i dene
+        pass
+    
+    # Fallback: Web scraping ile dene
+    try:
+        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            # Birden fazla pattern dene
+            patterns = [
+                r'id="MainContent_PanelInfo_lblPrice">([\d,]+\.?\d*)',
+                r'id="MainContent_PanelInfo_lblPrice">([\d,]+)',
+                r'Fon Birim Fiyatı[^>]*>([\d,]+\.?\d*)',
+                r'Birim Fiyat[^>]*>([\d,]+\.?\d*)',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, r.text)
+                if match:
+                    price_str = match.group(1).replace(",", ".")
+                    try:
+                        price = float(price_str)
+                        if price > 0:
+                            return price, price
+                    except ValueError:
+                        continue
     except Exception:
         pass
+    
+    # Son deneme: TEFAS API endpoint'i (eğer varsa)
+    try:
+        # TEFAS'ın JSON API'si varsa
+        api_url = f"https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
+        payload = {
+            "fontip": "YAT",
+            "sfontur": "",
+            "kurucukod": "",
+            "fonkod": fund_code
+        }
+        r = requests.post(api_url, json=payload, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            if data and len(data) > 0:
+                # Son kayıt en güncel fiyat
+                last_record = data[-1]
+                if "birimfiyat" in last_record:
+                    price = float(last_record["birimfiyat"])
+                    if price > 0:
+                        prev_price = float(data[-2]["birimfiyat"]) if len(data) > 1 else price
+                        return price, prev_price
+    except Exception:
+        pass
+    
     return 0, 0
 
 @st.cache_data(ttl=300)
