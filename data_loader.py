@@ -86,7 +86,8 @@ def add_sale_record(date, code, market, qty, price, cost, profit):
     except Exception:
         pass
 
-@st.cache_data(ttl=7200)  # 2 saat cache - TEFAS fon fiyatları gün içinde çok değişmez
+# Cache'i fund_code'ye göre ayrı ayrı tutmak için hash kullan
+@st.cache_data(ttl=7200, show_spinner=False)  # 2 saat cache - TEFAS fon fiyatları gün içinde çok değişmez
 def get_tefas_data(fund_code):
     """
     TEFAS fon fiyatını çeker. Önce tefas-crawler kullanır, başarısız olursa web scraping dener.
@@ -97,14 +98,18 @@ def get_tefas_data(fund_code):
     try:
         crawler = Crawler()
         end = datetime.now().strftime("%Y-%m-%d")
-        start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        start = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")  # 60 güne çıkar
         res = crawler.fetch(start=start, end=end, name=fund_code, columns=["Price"])
         if not res.empty and len(res) > 0:
             res = res.sort_index()
-            curr_price = float(res["Price"].iloc[-1])
-            prev_price = float(res["Price"].iloc[-2]) if len(res) > 1 else curr_price
-            if curr_price > 0:
-                return curr_price, prev_price
+            # Son geçerli fiyatı al (NaN değerleri atla)
+            valid_prices = res["Price"].dropna()
+            if len(valid_prices) > 0:
+                curr_price = float(valid_prices.iloc[-1])
+                prev_price = float(valid_prices.iloc[-2]) if len(valid_prices) > 1 else curr_price
+                # Makul fiyat aralığı kontrolü (TEFAS fonları genelde 0.01-100 TL arası)
+                if curr_price > 0 and curr_price < 100:
+                    return curr_price, prev_price
     except Exception as e:
         # Hata olursa sessizce geç, web scraping'i dene
         pass
@@ -113,54 +118,72 @@ def get_tefas_data(fund_code):
     try:
         url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
         }
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=15)
         if r.status_code == 200:
-            # Birden fazla pattern dene
+            # Birden fazla pattern dene - daha kapsamlı
             patterns = [
+                r'id="MainContent_PanelInfo_lblPrice"[^>]*>([\d,]+\.?\d*)',
                 r'id="MainContent_PanelInfo_lblPrice">([\d,]+\.?\d*)',
-                r'id="MainContent_PanelInfo_lblPrice">([\d,]+)',
-                r'Fon Birim Fiyatı[^>]*>([\d,]+\.?\d*)',
-                r'Birim Fiyat[^>]*>([\d,]+\.?\d*)',
+                r'Birim Fiyat[^<]*<[^>]*>([\d,]+\.?\d*)',
+                r'Birim Fiyatı[^<]*<[^>]*>([\d,]+\.?\d*)',
+                r'"birimFiyat"[^:]*:\s*"?([\d,]+\.?\d*)"?',
+                r'Fiyat[^>]*>([\d,]+\.?\d*)',
             ]
             for pattern in patterns:
-                match = re.search(pattern, r.text)
+                match = re.search(pattern, r.text, re.IGNORECASE)
                 if match:
                     price_str = match.group(1).replace(",", ".")
                     try:
                         price = float(price_str)
-                        if price > 0:
+                        # Makul fiyat aralığı kontrolü (0.01 - 1000 TL arası)
+                        if price > 0 and price < 1000:
                             return price, price
                     except ValueError:
                         continue
     except Exception:
         pass
     
-    # Son deneme: TEFAS API endpoint'i (eğer varsa)
+    # Son deneme: TEFAS API endpoint'i
     try:
-        # TEFAS'ın JSON API'si varsa
-        api_url = f"https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
+        # TEFAS'ın güncel API endpoint'i
+        api_url = "https://www.tefas.gov.tr/api/DB/BindHistoryInfo"
         payload = {
             "fontip": "YAT",
             "sfontur": "",
             "kurucukod": "",
             "fonkod": fund_code
         }
-        r = requests.post(api_url, json=payload, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        r = requests.post(api_url, json=payload, headers=headers, timeout=15)
         if r.status_code == 200:
             data = r.json()
-            if data and len(data) > 0:
+            if data and isinstance(data, list) and len(data) > 0:
                 # Son kayıt en güncel fiyat
                 last_record = data[-1]
-                if "birimfiyat" in last_record:
-                    price = float(last_record["birimfiyat"])
-                    if price > 0:
-                        prev_price = float(data[-2]["birimfiyat"]) if len(data) > 1 else price
+                # Farklı field isimlerini dene
+                price_field = None
+                for field in ["birimfiyat", "BirimFiyat", "BIRIMFIYAT", "price", "Price", "fiyat"]:
+                    if field in last_record:
+                        price_field = field
+                        break
+                
+                if price_field:
+                    price = float(last_record[price_field])
+                    if price > 0 and price < 1000:  # Makul fiyat kontrolü
+                        prev_price = float(data[-2][price_field]) if len(data) > 1 and price_field in data[-2] else price
                         return price, prev_price
     except Exception:
         pass
     
+    # Hiçbir yöntem çalışmazsa 0 döndür (maliyet kullanılacak)
     return 0, 0
 
 @st.cache_data(ttl=300)

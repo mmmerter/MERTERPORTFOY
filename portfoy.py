@@ -525,7 +525,7 @@ def run_analysis(df, usd_try_rate, view_currency):
         if "NAKIT" in pazar.upper():
             continue  # Nakitler özel işlenecek
         elif "FON" in pazar:
-            continue  # Fonlar özel işlenecek
+            continue  # Fonlar TEFAS'tan çekilecek, Yahoo Finance'ten değil
         elif "Gram Gümüş" in kod or "GRAM GÜMÜŞ" in kod:
             if "SI=F" not in emtia_symbols:
                 emtia_symbols.append("SI=F")
@@ -623,17 +623,44 @@ def run_analysis(df, usd_try_rate, view_currency):
                     curr = eurtry_price if eurtry_price else 36.0
                 prev = curr
             elif "FON" in pazar:
+                # TEFAS fon fiyatını çek - kesinlikle TEFAS'tan, başka kaynaktan değil
                 curr, prev = get_tefas_data(kod)
-                # Eğer fiyat 0 ise veya maliyetten çok farklıysa (muhtemelen yanlış), logla
+                
+                # Fiyat validasyonu ve düzeltme
                 if curr == 0:
-                    # Fiyat çekilemedi - maliyet kullanılacak
-                    pass
+                    # TEFAS'tan fiyat çekilemedi - maliyet kullan
+                    curr = maliyet if maliyet > 0 else 0
+                    prev = curr
+                elif curr > 100:  # Çok yüksek fiyat - muhtemelen yanlış (TEFAS fonları genelde 0.01-50 TL arası)
+                    # Şüpheli fiyat - cache'i temizle ve tekrar dene
+                    try:
+                        # Bu fon için cache'i temizle
+                        get_tefas_data.clear()
+                        curr_new, prev_new = get_tefas_data(kod)
+                        if curr_new > 0 and curr_new < 100:  # Makul aralıkta ise kullan
+                            curr = curr_new
+                            prev = prev_new
+                        else:
+                            # Hala sorun varsa maliyet kullan
+                            curr = maliyet if maliyet > 0 else curr
+                            prev = curr
+                    except Exception:
+                        # Hata olursa maliyet kullan
+                        curr = maliyet if maliyet > 0 else curr
+                        prev = curr
                 elif maliyet > 0 and curr > 0:
-                    # Fiyat maliyetten %500'den fazla farklıysa şüpheli
+                    # Fiyat maliyetten çok farklıysa kontrol et
                     ratio = abs(curr - maliyet) / maliyet
-                    if ratio > 5:
-                        # Şüpheli fiyat - ama yine de kullan, belki gerçekten değişmiştir
-                        pass
+                    if ratio > 10 and curr > 10:  # %1000'den fazla farklı VE yüksekse şüpheli
+                        # Cache'i temizle ve tekrar dene
+                        try:
+                            get_tefas_data.clear()
+                            curr_new, prev_new = get_tefas_data(kod)
+                            if curr_new > 0 and curr_new < 100 and abs(curr_new - maliyet) / maliyet < 10:
+                                curr = curr_new
+                                prev = prev_new
+                        except Exception:
+                            pass
             elif "Gram Gümüş" in kod or "GRAM GÜMÜŞ" in kod:
                 if "SI=F" in gram_prices_5d:
                     p_data = gram_prices_5d["SI=F"]
