@@ -53,10 +53,6 @@ MARKET_DATA = {
 def get_yahoo_symbol(kod, pazar):
     kod = str(kod).upper()
 
-    # Özel mapping
-    if kod == "TRMET":
-        return "KOZAA.IS"
-
     if pazar == "NAKIT":
         return kod # Nakit sembolü olduğu gibi döner (TL, USD)
     if pazar == "FON":

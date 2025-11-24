@@ -638,21 +638,6 @@ def _fetch_batch_prices_bist_abd(symbols_list, period="5d"):
         return {}
     prices = {}
     
-    # TRMET için fallback: hem KOZAA.IS hem TRMET.IS dene
-    def _try_fetch_price(symbol_to_try):
-        """Bir sembol için fiyat çekmeyi dener"""
-        try:
-            ticker = yf.Ticker(symbol_to_try)
-            h = ticker.history(period=period)
-            if not h.empty:
-                curr = h["Close"].iloc[-1]
-                prev = h["Close"].iloc[-2] if len(h) > 1 else curr
-                if curr > 0:  # Geçerli fiyat varsa
-                    return {"curr": curr, "prev": prev}
-        except Exception:
-            pass
-        return None
-    
     # Önce batch deneme
     try:
         tickers = yf.Tickers(" ".join(symbols_list))
@@ -676,15 +661,7 @@ def _fetch_batch_prices_bist_abd(symbols_list, period="5d"):
                         prev = h_longer["Close"].iloc[-2] if len(h_longer) > 1 else curr
                         prices[sym] = {"curr": curr, "prev": prev}
                     else:
-                        # TRMET için özel fallback: KOZAA.IS'den veri gelmezse TRMET.IS dene
-                        if sym == "KOZAA.IS":
-                            fallback_result = _try_fetch_price("TRMET.IS")
-                            if fallback_result:
-                                prices[sym] = fallback_result
-                            else:
-                                prices[sym] = {"curr": 0, "prev": 0}
-                        else:
-                            prices[sym] = {"curr": 0, "prev": 0}
+                        prices[sym] = {"curr": 0, "prev": 0}
             except Exception as e:
                 # Batch başarısız olursa, tek tek dene
                 try:
@@ -695,25 +672,9 @@ def _fetch_batch_prices_bist_abd(symbols_list, period="5d"):
                         prev = h["Close"].iloc[-2] if len(h) > 1 else curr
                         prices[sym] = {"curr": curr, "prev": prev}
                     else:
-                        # TRMET için özel fallback
-                        if sym == "KOZAA.IS":
-                            fallback_result = _try_fetch_price("TRMET.IS")
-                            if fallback_result:
-                                prices[sym] = fallback_result
-                            else:
-                                prices[sym] = {"curr": 0, "prev": 0}
-                        else:
-                            prices[sym] = {"curr": 0, "prev": 0}
-                except Exception:
-                    # TRMET için özel fallback
-                    if sym == "KOZAA.IS":
-                        fallback_result = _try_fetch_price("TRMET.IS")
-                        if fallback_result:
-                            prices[sym] = fallback_result
-                        else:
-                            prices[sym] = {"curr": 0, "prev": 0}
-                    else:
                         prices[sym] = {"curr": 0, "prev": 0}
+                except Exception:
+                    prices[sym] = {"curr": 0, "prev": 0}
     except Exception:
         # Batch tamamen başarısız olursa, her sembolü tek tek çek
         for sym in symbols_list:
@@ -723,38 +684,11 @@ def _fetch_batch_prices_bist_abd(symbols_list, period="5d"):
                 if not h.empty:
                     curr = h["Close"].iloc[-1]
                     prev = h["Close"].iloc[-2] if len(h) > 1 else curr
-                    if curr > 0:
-                        prices[sym] = {"curr": curr, "prev": prev}
-                    else:
-                        # TRMET için özel fallback
-                        if sym == "KOZAA.IS":
-                            fallback_result = _try_fetch_price("TRMET.IS")
-                            if fallback_result:
-                                prices[sym] = fallback_result
-                            else:
-                                prices[sym] = {"curr": 0, "prev": 0}
-                        else:
-                            prices[sym] = {"curr": 0, "prev": 0}
-                else:
-                    # TRMET için özel fallback
-                    if sym == "KOZAA.IS":
-                        fallback_result = _try_fetch_price("TRMET.IS")
-                        if fallback_result:
-                            prices[sym] = fallback_result
-                        else:
-                            prices[sym] = {"curr": 0, "prev": 0}
-                    else:
-                        prices[sym] = {"curr": 0, "prev": 0}
-            except Exception:
-                # TRMET için özel fallback
-                if sym == "KOZAA.IS":
-                    fallback_result = _try_fetch_price("TRMET.IS")
-                    if fallback_result:
-                        prices[sym] = fallback_result
-                    else:
-                        prices[sym] = {"curr": 0, "prev": 0}
+                    prices[sym] = {"curr": curr, "prev": prev}
                 else:
                     prices[sym] = {"curr": 0, "prev": 0}
+            except Exception:
+                prices[sym] = {"curr": 0, "prev": 0}
     
     return prices
 
@@ -992,7 +926,7 @@ def run_analysis(df, usd_try_rate, view_currency):
                 eurtry_price = h["Close"].iloc[-1]
             else:
                 eurtry_price = 36.0
-        except Exception:
+            except Exception:
             try:
                 # Fallback: daha uzun period dene
                 ticker = yf.Ticker("EURTRY=X")
@@ -1015,9 +949,9 @@ def run_analysis(df, usd_try_rate, view_currency):
         asset_currency = row["AssetCurrency"]
         sector = row["Sektör"]
         symbol = row["Symbol"]
-        
+
         curr, prev = 0, 0
-        
+
         try:
             if "NAKIT" in pazar.upper():
                 if kod == "TL":
@@ -1083,76 +1017,33 @@ def run_analysis(df, usd_try_rate, view_currency):
                         p_data = batch_prices[sym_key]
                         curr = p_data["curr"]
                         prev = p_data["prev"]
-                        
-                        # TRMET için özel fallback: KOZAA.IS'den veri gelmezse veya 0 ise TRMET.IS dene
-                        if kod == "TRMET" and (curr == 0 or curr is None):
-                            try:
-                                ticker = yf.Ticker("TRMET.IS")
-                                h = ticker.history(period="5d")
-                                if not h.empty:
-                                    curr_fallback = h["Close"].iloc[-1]
-                                    prev_fallback = h["Close"].iloc[-2] if len(h) > 1 else curr_fallback
-                                    if curr_fallback > 0:
-                                        curr = curr_fallback
-                                        prev = prev_fallback
-                            except Exception:
-                                pass
                     else:
                         # Batch'te yoksa, tek tek dene (borsa kapalıyken fallback)
                         try:
                             ticker = yf.Ticker(sym_key)
                             h = ticker.history(period="5d")
-                            if not h.empty:
+                if not h.empty:
                                 curr = h["Close"].iloc[-1]
                                 prev = h["Close"].iloc[-2] if len(h) > 1 else curr
                             else:
                                 # Daha uzun period dene
                                 h = ticker.history(period="1mo")
-                                if not h.empty:
+                if not h.empty:
                                     curr = h["Close"].iloc[-1]
                                     prev = h["Close"].iloc[-2] if len(h) > 1 else curr
-                                else:
+            else:
                                     curr = 0
                                     prev = 0
-                            
-                            # TRMET için özel fallback: KOZAA.IS'den veri gelmezse veya 0 ise TRMET.IS dene
-                            if kod == "TRMET" and (curr == 0 or curr is None):
-                                try:
-                                    ticker_fallback = yf.Ticker("TRMET.IS")
-                                    h_fallback = ticker_fallback.history(period="5d")
-                                    if not h_fallback.empty:
-                                        curr_fallback = h_fallback["Close"].iloc[-1]
-                                        prev_fallback = h_fallback["Close"].iloc[-2] if len(h_fallback) > 1 else curr_fallback
-                                        if curr_fallback > 0:
-                                            curr = curr_fallback
-                                            prev = prev_fallback
-                                except Exception:
-                                    pass
                         except Exception:
-                            # TRMET için özel fallback: hata olursa da TRMET.IS dene
-                            if kod == "TRMET":
-                                try:
-                                    ticker_fallback = yf.Ticker("TRMET.IS")
-                                    h_fallback = ticker_fallback.history(period="5d")
-                                    if not h_fallback.empty:
-                                        curr = h_fallback["Close"].iloc[-1]
-                                        prev = h_fallback["Close"].iloc[-2] if len(h_fallback) > 1 else curr
-                                    else:
-                                        curr = 0
-                                        prev = 0
-                                except Exception:
-                                    curr = 0
-                                    prev = 0
-                            else:
-                                curr = 0
-                                prev = 0
+                            curr = 0
+                            prev = 0
                 else:
                     # Symbol map'te yoksa, direkt sembol ile dene
                     try:
                         ticker = yf.Ticker(symbol)
                         h = ticker.history(period="5d")
-                        if not h.empty:
-                            curr = h["Close"].iloc[-1]
+                if not h.empty:
+                    curr = h["Close"].iloc[-1]
                             prev = h["Close"].iloc[-2] if len(h) > 1 else curr
                         else:
                             # Daha uzun period dene
@@ -1168,7 +1059,7 @@ def run_analysis(df, usd_try_rate, view_currency):
                         prev = 0
         except Exception:
             pass
-        
+
         # Eğer hala fiyat yoksa, maliyet kullan (ama önce bir daha dene)
         if curr == 0:
             # Son bir deneme - daha uzun period ile
@@ -1180,7 +1071,7 @@ def run_analysis(df, usd_try_rate, view_currency):
                         curr = h["Close"].iloc[-1]
                         prev = h["Close"].iloc[-2] if len(h) > 1 else curr
                     else:
-                        curr = maliyet
+            curr = maliyet
                         prev = maliyet
                 else:
                     curr = maliyet
@@ -1193,11 +1084,11 @@ def run_analysis(df, usd_try_rate, view_currency):
             prev = curr
         if curr > 0 and maliyet > 0 and (maliyet / curr) > 50:
             maliyet /= 100
-        
+
         val_native = curr * adet
         cost_native = maliyet * adet
         daily_chg_native = (curr - prev) * adet
-        
+
         if view_currency == "TRY":
             if asset_currency == "USD":
                 f_g = curr * usd_try_rate
@@ -1220,10 +1111,10 @@ def run_analysis(df, usd_try_rate, view_currency):
                 v_g = val_native
                 c_g = cost_native
                 d_g = daily_chg_native
-        
+
         pnl = v_g - c_g
         pnl_pct = (pnl / c_g * 100) if c_g > 0 else 0
-        
+
         # Günlük fiyat değişimi yüzdesi (izleme listesi için)
         # prev ve curr'ü view_currency'ye çevir
         if view_currency == "TRY":
@@ -1240,22 +1131,22 @@ def run_analysis(df, usd_try_rate, view_currency):
         daily_pct_change = ((f_g - prev_g) / prev_g * 100) if prev_g > 0 else 0
         
         results.append({
-            "Kod": kod,
-            "Pazar": pazar,
-            "Tip": tip,
-            "Adet": adet,
-            "Maliyet": maliyet,
-            "Fiyat": f_g,
+                "Kod": kod,
+                "Pazar": pazar,
+                "Tip": tip,
+                "Adet": adet,
+                "Maliyet": maliyet,
+                "Fiyat": f_g,
             "PB": view_currency,
-            "Değer": v_g,
-            "Top. Kâr/Zarar": pnl,
-            "Top. %": pnl_pct,
-            "Gün. Kâr/Zarar": d_g,
+                "Değer": v_g,
+                "Top. Kâr/Zarar": pnl,
+                "Top. %": pnl_pct,
+                "Gün. Kâr/Zarar": d_g,
             "Günlük Değişim %": daily_pct_change,  # İzleme listesi için
-            "Notlar": row.get("Notlar", ""),
-            "Sektör": sector,
+                "Notlar": row.get("Notlar", ""),
+                "Sektör": sector,
         })
-    
+
     return pd.DataFrame(results)
 
 
@@ -1539,7 +1430,7 @@ if selected == "Dashboard":
 
             if map_mode == "Günlük Değişim %":
                 color_col = "Gün. %"
-            
+
             # Yüzdeleri 1 ondalık basamağa yuvarla (görüntü için)
             heat_df["Top. %_formatted"] = heat_df["Top. %"].round(1)
             heat_df["Gün. %_formatted"] = heat_df["Gün. %"].round(1)
