@@ -13,51 +13,80 @@ from utils import get_yahoo_symbol
 
 SHEET_NAME = "PortfoyData"
 
+# Google Sheets client cache
+_client_cache = None
+
+def _get_gspread_client():
+    """Google Sheets client'ı cache'ler"""
+    global _client_cache
+    if _client_cache is None:
+        try:
+            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+            _client_cache = gspread.authorize(creds)
+        except Exception:
+            _client_cache = None
+    return _client_cache
+
+@st.cache_data(ttl=30)
 def get_data_from_sheet():
     try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-        client = gspread.authorize(creds)
+        client = _get_gspread_client()
+        if client is None:
+            return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         sheet = client.open(SHEET_NAME).sheet1
         data = sheet.get_all_records()
-        if not data: return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
+        if not data: 
+            return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         df = pd.DataFrame(data)
         for col in ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]:
-            if col not in df.columns: df[col] = ""
+            if col not in df.columns: 
+                df[col] = ""
         if not df.empty:
-            df["Pazar"] = df["Pazar"].apply(lambda x: "FON" if "FON" in str(x) else x)
-            df["Pazar"] = df["Pazar"].apply(lambda x: "EMTIA" if "FIZIKI" in str(x).upper() else x)
+            # Vectorized işlemler
+            df["Pazar"] = df["Pazar"].astype(str)
+            df.loc[df["Pazar"].str.contains("FON", case=False, na=False), "Pazar"] = "FON"
+            df.loc[df["Pazar"].str.upper().str.contains("FIZIKI", na=False), "Pazar"] = "EMTIA"
         return df
-    except: return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
+    except Exception:
+        return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
 
 def save_data_to_sheet(df):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-    client = gspread.authorize(creds)
-    sheet = client.open(SHEET_NAME).sheet1
-    sheet.clear()
-    sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    try:
+        client = _get_gspread_client()
+        if client is None:
+            return
+        sheet = client.open(SHEET_NAME).sheet1
+        sheet.clear()
+        sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    except Exception:
+        pass
 
+@st.cache_data(ttl=60)
 def get_sales_history():
     try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-        client = gspread.authorize(creds)
+        client = _get_gspread_client()
+        if client is None:
+            return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
         sheet = client.open(SHEET_NAME).worksheet("Satislar")
         data = sheet.get_all_records()
         return pd.DataFrame(data) if data else pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
-    except: return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
+    except Exception:
+        return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
 
 def add_sale_record(date, code, market, qty, price, cost, profit):
     try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-        client = gspread.authorize(creds)
+        client = _get_gspread_client()
+        if client is None:
+            return
         sheet = client.open(SHEET_NAME).worksheet("Satislar")
         sheet.append_row([str(date), code, market, float(qty), float(price), float(cost), float(profit)])
-    except: pass
+        # Cache'i temizle
+        get_sales_history.clear()
+    except Exception:
+        pass
 
-@st.cache_data(ttl=14400)
+@st.cache_data(ttl=3600)  # 1 saat cache - fon fiyatları gün içinde çok değişmez
 def get_tefas_data(fund_code):
     try:
         url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund_code}"
@@ -65,8 +94,11 @@ def get_tefas_data(fund_code):
         r = requests.get(url, headers=headers, timeout=5)
         if r.status_code == 200:
             match = re.search(r'id="MainContent_PanelInfo_lblPrice">([\d,]+)', r.text)
-            if match: return float(match.group(1).replace(",", ".")), float(match.group(1).replace(",", "."))
-    except: pass
+            if match: 
+                price = float(match.group(1).replace(",", "."))
+                return price, price
+    except Exception:
+        pass
     try:
         crawler = Crawler()
         end = datetime.now().strftime("%Y-%m-%d")
@@ -75,7 +107,8 @@ def get_tefas_data(fund_code):
         if not res.empty:
             res = res.sort_index()
             return float(res["Price"].iloc[-1]), float(res["Price"].iloc[-2])
-    except: pass
+    except Exception:
+        pass
     return 0, 0
 
 @st.cache_data(ttl=300)
@@ -101,7 +134,7 @@ def get_financial_news(topic="finance"):
         return [{"title": e.title, "link": e.link, "date": e.published} for e in feed.entries[:10]]
     except: return []
 
-@st.cache_data(ttl=45)
+@st.cache_data(ttl=60)  # 1 dakika cache - ticker verileri sık güncellenir
 def get_tickers_data(df_portfolio, usd_try):
     total_cap, btc_d, total_3, others_d, others_cap = get_crypto_globals()
     market_symbols = [("BIST 100", "XU100.IS"), ("USD", "TRY=X"), ("EUR", "EURTRY=X"), ("BTC/USDT", "BTC-USD"),
@@ -180,9 +213,9 @@ def get_binance_positions(api_key, api_secret):
 def _get_history_sheet():
     """Portföy tarihçe sheet'ine erişim helper'ı."""
     try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-        client = gspread.authorize(creds)
+        client = _get_gspread_client()
+        if client is None:
+            return None
         # Ana sheet ile aynı dosyada "portfolio_history" isimli sayfa:
         sheet = client.open(SHEET_NAME).worksheet("portfolio_history")
         return sheet
@@ -317,14 +350,9 @@ def get_timeframe_changes(history_df):
 def _get_market_history_sheet(ws_name: str):
     """Belirli bir pazar için sheet'e erişim helper'ı."""
     try:
-        scope = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive",
-        ]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(
-            st.secrets["gcp_service_account"], scope
-        )
-        client = gspread.authorize(creds)
+        client = _get_gspread_client()
+        if client is None:
+            return None
         sheet = client.open(SHEET_NAME).worksheet(ws_name)
         return sheet
     except Exception:

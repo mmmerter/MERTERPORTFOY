@@ -292,154 +292,234 @@ selected = option_menu(
 
 
 # --- ANALİZ ---
+@st.cache_data(ttl=60)
+def _fetch_batch_prices(symbols_list, period="2d"):
+    """Batch olarak fiyat verilerini çeker"""
+    if not symbols_list:
+        return {}
+    try:
+        tickers = yf.Tickers(" ".join(symbols_list))
+        prices = {}
+        for sym in symbols_list:
+            try:
+                h = tickers.tickers[sym].history(period=period)
+                if not h.empty:
+                    prices[sym] = {
+                        "curr": h["Close"].iloc[-1],
+                        "prev": h["Close"].iloc[0] if len(h) > 1 else h["Close"].iloc[-1]
+                    }
+            except Exception:
+                prices[sym] = {"curr": 0, "prev": 0}
+        return prices
+    except Exception:
+        return {}
+
+@st.cache_data(ttl=300)
+def _fetch_sector_info(symbols_list):
+    """Batch olarak sektör bilgilerini çeker"""
+    if not symbols_list:
+        return {}
+    sectors = {}
+    try:
+        tickers = yf.Tickers(" ".join(symbols_list))
+        for sym in symbols_list:
+            try:
+                info = tickers.tickers[sym].info
+                sectors[sym] = info.get("sector", "Bilinmiyor")
+            except Exception:
+                sectors[sym] = "Bilinmiyor"
+    except Exception:
+        pass
+    return sectors
+
 def run_analysis(df, usd_try_rate, view_currency):
-    results = []
     if df.empty:
         return pd.DataFrame(columns=ANALYSIS_COLS)
 
-    for _, row in df.iterrows():
-        kod = row.get("Kod", "")
-        pazar = row.get("Pazar", "")
-        tip = row.get("Tip", "")
+    # DataFrame'i kopyala ve normalize et
+    df_work = df.copy()
+    df_work["Kod"] = df_work["Kod"].astype(str)
+    df_work["Pazar"] = df_work["Pazar"].astype(str)
+    
+    # Pazar normalizasyonu (vectorized)
+    df_work.loc[df_work["Kod"].isin(KNOWN_FUNDS), "Pazar"] = "FON"
+    df_work.loc[df_work["Pazar"].str.upper().str.contains("FIZIKI", na=False), "Pazar"] = "EMTIA"
+    
+    # Boş kodları filtrele
+    df_work = df_work[df_work["Kod"].str.strip() != ""].copy()
+    
+    if df_work.empty:
+        return pd.DataFrame(columns=ANALYSIS_COLS)
 
-        if kod in KNOWN_FUNDS:
-            pazar = "FON"
-        if "FIZIKI" in str(pazar).upper():
-            pazar = "EMTIA"
-
-        adet = smart_parse(row.get("Adet", 0))
-        maliyet = smart_parse(row.get("Maliyet", 0))
-
-        if not kod:
-            continue
-
-        symbol = get_yahoo_symbol(kod, pazar)
-
-        # Sektör
-        sector = ""
-        if "BIST" in pazar or "ABD" in pazar:
-            try:
-                ticker = yf.Ticker(symbol)
-                info = ticker.info
-                sector = info.get("sector", "Bilinmiyor")
-            except Exception:
-                sector = "Bilinmiyor"
+    # Adet ve Maliyet parse (vectorized)
+    df_work["Adet"] = df_work["Adet"].apply(smart_parse)
+    df_work["Maliyet"] = df_work["Maliyet"].apply(smart_parse)
+    
+    # Symbol mapping
+    df_work["Symbol"] = df_work.apply(lambda row: get_yahoo_symbol(row["Kod"], row["Pazar"]), axis=1)
+    
+    # Asset currency belirleme (vectorized)
+    df_work["AssetCurrency"] = df_work.apply(
+        lambda row: "TRY" if (
+            "BIST" in row["Pazar"] or "TL" in str(row["Kod"]) or 
+            "FON" in row["Pazar"] or "EMTIA" in row["Pazar"] or "NAKIT" in row["Pazar"]
+        ) else "USD",
+        axis=1
+    )
+    
+    # Sektör belirleme
+    df_work["Sektör"] = ""
+    bist_abd_mask = df_work["Pazar"].str.contains("BIST|ABD", case=False, na=False)
+    df_work.loc[df_work["Pazar"].str.contains("FON", case=False, na=False), "Sektör"] = "Yatırım Fonu"
+    df_work.loc[df_work["Pazar"].str.contains("NAKIT", case=False, na=False), "Sektör"] = "Nakit Varlık"
+    df_work.loc[df_work["Pazar"].str.contains("EMTIA", case=False, na=False), "Sektör"] = "Emtia"
+    
+    # Batch sektör bilgisi çekme
+    if bist_abd_mask.any():
+        sector_symbols = df_work[bist_abd_mask]["Symbol"].unique().tolist()
+        sector_info = _fetch_sector_info(sector_symbols)
+        df_work.loc[bist_abd_mask, "Sektör"] = df_work[bist_abd_mask]["Symbol"].map(sector_info).fillna("Bilinmiyor")
+    
+    # Fiyat verilerini batch olarak çek
+    yahoo_symbols = []
+    symbol_map = {}  # kod -> symbol mapping
+    
+    for idx, row in df_work.iterrows():
+        kod = row["Kod"]
+        pazar = row["Pazar"]
+        symbol = row["Symbol"]
+        
+        if "NAKIT" in pazar.upper():
+            continue  # Nakitler özel işlenecek
         elif "FON" in pazar:
-            sector = "Yatırım Fonu"
-        elif "NAKIT" in pazar:
-            sector = "Nakit Varlık"
-        elif "EMTIA" in pazar:
-            sector = "Emtia"
-
-        asset_currency = (
-            "TRY"
-            if (
-                "BIST" in pazar
-                or "TL" in kod
-                or "FON" in pazar
-                or "EMTIA" in pazar
-                or "NAKIT" in pazar
-            )
-            else "USD"
-        )
-
+            continue  # Fonlar özel işlenecek
+        elif "Gram Gümüş" in kod or "GRAM GÜMÜŞ" in kod:
+            if "SI=F" not in yahoo_symbols:
+                yahoo_symbols.append("SI=F")
+            symbol_map[idx] = "SI=F"
+        elif "Gram Altın" in kod or "GRAM ALTIN" in kod:
+            if "GC=F" not in yahoo_symbols:
+                yahoo_symbols.append("GC=F")
+            symbol_map[idx] = "GC=F"
+        else:
+            if symbol not in yahoo_symbols:
+                yahoo_symbols.append(symbol)
+            symbol_map[idx] = symbol
+    
+    # Batch fiyat çekme
+    batch_prices = _fetch_batch_prices(yahoo_symbols, period="2d")
+    gram_prices_5d = {}
+    if "SI=F" in yahoo_symbols or "GC=F" in yahoo_symbols:
+        gram_batch = _fetch_batch_prices(["SI=F", "GC=F"], period="5d")
+        gram_prices_5d = gram_batch
+    
+    # EURTRY için özel
+    eurtry_price = None
+    if (df_work["Pazar"].str.contains("NAKIT", case=False, na=False) & 
+        (df_work["Kod"] == "EUR")).any():
+        try:
+            eurtry_price = yf.Ticker("EURTRY=X").history(period="1d")["Close"].iloc[-1]
+        except Exception:
+            eurtry_price = 36.0
+    
+    # Fiyatları hesapla
+    results = []
+    for idx, row in df_work.iterrows():
+        kod = row["Kod"]
+        pazar = row["Pazar"]
+        tip = row["Tip"]
+        adet = row["Adet"]
+        maliyet = row["Maliyet"]
+        asset_currency = row["AssetCurrency"]
+        sector = row["Sektör"]
+        symbol = row["Symbol"]
+        
         curr, prev = 0, 0
-
+        
         try:
             if "NAKIT" in pazar.upper():
                 if kod == "TL":
                     curr = 1
                 elif kod == "USD":
-                    curr = USD_TRY
+                    curr = usd_try_rate
                 elif kod == "EUR":
-                    try:
-                        curr = (
-                            yf.Ticker("EURTRY=X")
-                            .history(period="1d")["Close"]
-                            .iloc[-1]
-                        )
-                    except Exception:
-                        curr = 36.0
+                    curr = eurtry_price if eurtry_price else 36.0
                 prev = curr
             elif "FON" in pazar:
                 curr, prev = get_tefas_data(kod)
-            elif "Gram Gümüş" in kod:
-                h = yf.Ticker("SI=F").history(period="5d")
-                if not h.empty:
-                    c = h["Close"].iloc[-1]
-                    p = h["Close"].iloc[-2] if len(h) > 1 else c
-                    curr = (c * USD_TRY) / 31.1035
-                    prev = (p * USD_TRY) / 31.1035
-            elif "Gram Altın" in kod:
-                h = yf.Ticker("GC=F").history(period="5d")
-                if not h.empty:
-                    c = h["Close"].iloc[-1]
-                    p = h["Close"].iloc[-2] if len(h) > 1 else c
-                    curr = (c * USD_TRY) / 31.1035
-                    prev = (p * USD_TRY) / 31.1035
+            elif "Gram Gümüş" in kod or "GRAM GÜMÜŞ" in kod:
+                if "SI=F" in gram_prices_5d:
+                    p_data = gram_prices_5d["SI=F"]
+                    curr = (p_data["curr"] * usd_try_rate) / 31.1035
+                    prev = (p_data["prev"] * usd_try_rate) / 31.1035
+            elif "Gram Altın" in kod or "GRAM ALTIN" in kod:
+                if "GC=F" in gram_prices_5d:
+                    p_data = gram_prices_5d["GC=F"]
+                    curr = (p_data["curr"] * usd_try_rate) / 31.1035
+                    prev = (p_data["prev"] * usd_try_rate) / 31.1035
             else:
-                h = yf.Ticker(symbol).history(period="2d")
-                if not h.empty:
-                    curr = h["Close"].iloc[-1]
-                    prev = h["Close"].iloc[0]
+                if symbol in symbol_map:
+                    sym_key = symbol_map[idx]
+                    if sym_key in batch_prices:
+                        p_data = batch_prices[sym_key]
+                        curr = p_data["curr"]
+                        prev = p_data["prev"]
         except Exception:
             pass
-
+        
         if curr == 0:
             curr = maliyet
         if prev == 0:
             prev = curr
         if curr > 0 and maliyet > 0 and (maliyet / curr) > 50:
             maliyet /= 100
-
+        
         val_native = curr * adet
         cost_native = maliyet * adet
         daily_chg_native = (curr - prev) * adet
-
-        if GORUNUM_PB == "TRY":
+        
+        if view_currency == "TRY":
             if asset_currency == "USD":
-                f_g = curr * USD_TRY
-                v_g = val_native * USD_TRY
-                c_g = cost_native * USD_TRY
-                d_g = daily_chg_native * USD_TRY
+                f_g = curr * usd_try_rate
+                v_g = val_native * usd_try_rate
+                c_g = cost_native * usd_try_rate
+                d_g = daily_chg_native * usd_try_rate
             else:
                 f_g = curr
                 v_g = val_native
                 c_g = cost_native
                 d_g = daily_chg_native
-        else:
+        else:  # USD
             if asset_currency == "TRY":
-                f_g = curr / USD_TRY
-                v_g = val_native / USD_TRY
-                c_g = cost_native / USD_TRY
-                d_g = daily_chg_native / USD_TRY
+                f_g = curr / usd_try_rate
+                v_g = val_native / usd_try_rate
+                c_g = cost_native / usd_try_rate
+                d_g = daily_chg_native / usd_try_rate
             else:
                 f_g = curr
                 v_g = val_native
                 c_g = cost_native
                 d_g = daily_chg_native
-
+        
         pnl = v_g - c_g
         pnl_pct = (pnl / c_g * 100) if c_g > 0 else 0
-
-        results.append(
-            {
-                "Kod": kod,
-                "Pazar": pazar,
-                "Tip": tip,
-                "Adet": adet,
-                "Maliyet": maliyet,
-                "Fiyat": f_g,
-                "PB": GORUNUM_PB,
-                "Değer": v_g,
-                "Top. Kâr/Zarar": pnl,
-                "Top. %": pnl_pct,
-                "Gün. Kâr/Zarar": d_g,
-                "Notlar": row.get("Notlar", ""),
-                "Sektör": sector,
-            }
-        )
-
+        
+        results.append({
+            "Kod": kod,
+            "Pazar": pazar,
+            "Tip": tip,
+            "Adet": adet,
+            "Maliyet": maliyet,
+            "Fiyat": f_g,
+            "PB": view_currency,
+            "Değer": v_g,
+            "Top. Kâr/Zarar": pnl,
+            "Top. %": pnl_pct,
+            "Gün. Kâr/Zarar": d_g,
+            "Notlar": row.get("Notlar", ""),
+            "Sektör": sector,
+        })
+    
     return pd.DataFrame(results)
 
 
@@ -675,11 +755,10 @@ if selected == "Dashboard":
                 key="heatmap_scope",
             )
 
-        # Çalışılacak kopya
-        heat_df = spot_only.copy()
-
         # Pazar filtresi (sadece görünüm, hesap mantığına karışmaz)
-        if heat_scope != "Tümü":
+        if heat_scope == "Tümü":
+            heat_df = spot_only
+        else:
             scope_map = {
                 "BIST": "BIST",
                 "ABD": "ABD",
@@ -689,9 +768,10 @@ if selected == "Dashboard":
                 "Nakit": "NAKIT",
             }
             target = scope_map.get(heat_scope, heat_scope).upper()
-            heat_df = heat_df[
-                heat_df["Pazar"].astype(str).str.upper().str.contains(target, na=False)
-            ]
+            # Vectorized filtreleme - gereksiz copy() yok
+            pazar_upper = spot_only["Pazar"].astype(str).str.upper()
+            mask = pazar_upper.str.contains(target, na=False)
+            heat_df = spot_only[mask]
 
         if heat_df.empty:
             st.info("Seçilen kapsam için portföyde varlık bulunmuyor.")
@@ -774,11 +854,9 @@ elif selected == "Portföy":
 
     # BIST
     with tab_bist:
-        bist_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains(
-                "BIST", case=False, na=False
-            )
-        ]
+        # Vectorized filtreleme - daha hızlı
+        pazar_str = portfoy_only["Pazar"].astype(str)
+        bist_df = portfoy_only[pazar_str.str.contains("BIST", case=False, na=False)]
 
         # Haftalık / Aylık / YTD + sparkline için tarihsel log
         timeframe_bist = None
@@ -823,9 +901,8 @@ elif selected == "Portföy":
 
     # ABD
     with tab_abd:
-        abd_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains("ABD", case=False, na=False)
-        ]
+        pazar_str = portfoy_only["Pazar"].astype(str)
+        abd_df = portfoy_only[pazar_str.str.contains("ABD", case=False, na=False)]
 
         timeframe_abd = None
         if not abd_df.empty:
@@ -869,9 +946,8 @@ elif selected == "Portföy":
 
     # FON
     with tab_fon:
-        fon_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains("FON", case=False, na=False)
-        ]
+        pazar_str = portfoy_only["Pazar"].astype(str)
+        fon_df = portfoy_only[pazar_str.str.contains("FON", case=False, na=False)]
 
         timeframe_fon = None
         if not fon_df.empty:
@@ -915,11 +991,8 @@ elif selected == "Portföy":
 
     # EMTIA
     with tab_emtia:
-        emtia_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains(
-                "EMTIA", case=False, na=False
-            )
-        ]
+        pazar_str = portfoy_only["Pazar"].astype(str)
+        emtia_df = portfoy_only[pazar_str.str.contains("EMTIA", case=False, na=False)]
 
         timeframe_emtia = None
         if not emtia_df.empty:
@@ -963,11 +1036,8 @@ elif selected == "Portföy":
 
     # KRIPTO
     with tab_kripto:
-        kripto_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains(
-                "KRIPTO", case=False, na=False
-            )
-        ]
+        pazar_str = portfoy_only["Pazar"].astype(str)
+        kripto_df = portfoy_only[pazar_str.str.contains("KRIPTO", case=False, na=False)]
         render_kral_infobar(kripto_df, sym)
         render_pazar_tab(
             portfoy_only,
@@ -984,11 +1054,8 @@ elif selected == "Portföy":
 
     # NAKIT
     with tab_nakit:
-        nakit_df = portfoy_only[
-            portfoy_only["Pazar"].astype(str).str.contains(
-                "NAKIT", case=False, na=False
-            )
-        ]
+        pazar_str = portfoy_only["Pazar"].astype(str)
+        nakit_df = portfoy_only[pazar_str.str.contains("NAKIT", case=False, na=False)]
 
         timeframe_nakit = None
         if not nakit_df.empty:

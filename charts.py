@@ -187,6 +187,25 @@ def render_detail_view(symbol: str, pazar: str) -> None:
     st.write(f"Detay görünüm: {symbol} ({pazar})")
 
 
+@st.cache_data(ttl=300)
+def _fetch_historical_prices_batch(symbols_list, period="60d", interval="1d"):
+    """Batch olarak tarihsel fiyat verilerini çeker"""
+    if not symbols_list:
+        return {}
+    try:
+        tickers = yf.Tickers(" ".join(symbols_list))
+        prices_dict = {}
+        for sym in symbols_list:
+            try:
+                h = tickers.tickers[sym].history(period=period, interval=interval)
+                if not h.empty:
+                    prices_dict[sym] = h["Close"]
+            except Exception:
+                prices_dict[sym] = None
+        return prices_dict
+    except Exception:
+        return {}
+
 def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
     """
     Son 60 güne ait yaklaşık tarihsel portföy değeri grafiği oluşturur.
@@ -194,13 +213,17 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
     - Lot/adet ile çarpılır.
     - Seçilen para birimine (pb: TRY / USD) göre çevrilir.
     - Hepsi toplanıp tek zaman serisi olarak çizilir.
+    Optimize edilmiş: Batch veri çekme kullanılıyor.
     """
     if df is None or df.empty:
         return None
 
-    all_series = []
-
-    for _, row in df.iterrows():
+    # Önce tüm sembolleri topla
+    yahoo_symbols = []
+    symbol_to_rows = {}  # symbol -> [(idx, kod, pazar, adet, asset_currency), ...]
+    special_cases = []  # Nakit, fon, gram altın/gümüş için
+    
+    for idx, row in df.iterrows():
         kod = str(row.get("Kod", ""))
         pazar = str(row.get("Pazar", ""))
         adet = float(row.get("Adet", 0) or 0)
@@ -223,71 +246,99 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str):
         else:
             asset_currency = "USD"
 
-        prices = None
+        # Özel durumları ayır
+        if "NAKIT" in pazar_upper:
+            special_cases.append(("NAKIT", idx, kod, pazar, adet, asset_currency))
+        elif "FON" in pazar_upper:
+            special_cases.append(("FON", idx, kod, pazar, adet, asset_currency))
+        elif "GRAM GÜMÜŞ" in kod_upper:
+            if "SI=F" not in yahoo_symbols:
+                yahoo_symbols.append("SI=F")
+            if "SI=F" not in symbol_to_rows:
+                symbol_to_rows["SI=F"] = []
+            symbol_to_rows["SI=F"].append((idx, kod, pazar, adet, asset_currency, "GRAM_GUMUS"))
+        elif "GRAM ALTIN" in kod_upper:
+            if "GC=F" not in yahoo_symbols:
+                yahoo_symbols.append("GC=F")
+            if "GC=F" not in symbol_to_rows:
+                symbol_to_rows["GC=F"] = []
+            symbol_to_rows["GC=F"].append((idx, kod, pazar, adet, asset_currency, "GRAM_ALTIN"))
+        else:
+            symbol = get_yahoo_symbol(kod, pazar)
+            if symbol not in yahoo_symbols:
+                yahoo_symbols.append(symbol)
+            if symbol not in symbol_to_rows:
+                symbol_to_rows[symbol] = []
+            symbol_to_rows[symbol].append((idx, kod, pazar, adet, asset_currency, "NORMAL"))
 
+    # Batch olarak fiyat verilerini çek
+    batch_prices = _fetch_historical_prices_batch(yahoo_symbols, period="60d", interval="1d")
+    
+    all_series = []
+    today = pd.Timestamp.today().normalize()
+
+    # Özel durumları işle
+    for case_type, idx, kod, pazar, adet, asset_currency in special_cases:
+        prices = None
         try:
-            # Nakitler
-            if "NAKIT" in pazar_upper:
-                today = pd.Timestamp.today().normalize()
+            if case_type == "NAKIT":
+                kod_upper = kod.upper()
                 if kod_upper == "TL":
                     prices = pd.Series([1.0], index=[today])
                 elif kod_upper == "USD":
                     prices = pd.Series([usd_try_rate], index=[today])
                 else:
                     prices = pd.Series([1.0], index=[today])
-
-            # Fonlar: sabit seri
-            elif "FON" in pazar_upper:
+            elif case_type == "FON":
                 price, _ = get_tefas_data(kod)
                 if price and price > 0:
-                    idx = pd.date_range(
-                        end=pd.Timestamp.today().normalize(), periods=30, freq="D"
-                    )
-                    prices = pd.Series(price, index=idx)
-
-            # Gram Gümüş
-            elif "GRAM GÜMÜŞ" in kod_upper:
-                h = yf.Ticker("SI=F").history(period="60d", interval="1d")
-                if not h.empty:
-                    s = (h["Close"] * usd_try_rate) / 31.1035
-                    prices = s
-
-            # Gram Altın
-            elif "GRAM ALTIN" in kod_upper:
-                h = yf.Ticker("GC=F").history(period="60d", interval="1d")
-                if not h.empty:
-                    s = (h["Close"] * usd_try_rate) / 31.1035
-                    prices = s
-
-            # Hisse / Kripto
-            else:
-                symbol = get_yahoo_symbol(kod, pazar)
-                h = yf.Ticker(symbol).history(period="60d", interval="1d")
-                if not h.empty:
-                    prices = h["Close"]
-
+                    idx_range = pd.date_range(end=today, periods=30, freq="D")
+                    prices = pd.Series(price, index=idx_range)
         except Exception:
-            prices = None
+            pass
+        
+        if prices is not None and not prices.empty:
+            prices.index = pd.to_datetime(prices.index).tz_localize(None)
+            if pb == "TRY":
+                if asset_currency == "USD":
+                    values = prices * adet * usd_try_rate
+                else:
+                    values = prices * adet
+            else:
+                if asset_currency == "TRY":
+                    values = prices * adet / usd_try_rate
+                else:
+                    values = prices * adet
+            all_series.append(values.rename(f"Değer_{idx}"))
 
-        if prices is None or prices.empty:
+    # Normal sembolleri işle
+    for symbol, rows in symbol_to_rows.items():
+        if symbol not in batch_prices or batch_prices[symbol] is None:
             continue
-
-        # TZ-FIX: timezone'lu index varsa timezone'u sıfırla
+        
+        prices = batch_prices[symbol]
         prices.index = pd.to_datetime(prices.index).tz_localize(None)
-
-        # TRY / USD çevirisi
-        if pb == "TRY":
-            if asset_currency == "USD":
-                values = prices * adet * usd_try_rate
+        
+        for idx, kod, pazar, adet, asset_currency, case_type in rows:
+            if case_type in ["GRAM_GUMUS", "GRAM_ALTIN"]:
+                # Gram altın/gümüş için özel dönüşüm
+                prices_converted = (prices * usd_try_rate) / 31.1035
             else:
-                values = prices * adet
-        else:  # pb == "USD"
-            if asset_currency == "TRY":
-                values = prices * adet / usd_try_rate
-            else:
-                values = prices * adet
-
-        all_series.append(values.rename("Değer"))
+                prices_converted = prices
+            
+            # TRY / USD çevirisi
+            if pb == "TRY":
+                if asset_currency == "USD":
+                    values = prices_converted * adet * usd_try_rate
+                else:
+                    values = prices_converted * adet
+            else:  # pb == "USD"
+                if asset_currency == "TRY":
+                    values = prices_converted * adet / usd_try_rate
+                else:
+                    values = prices_converted * adet
+            
+            all_series.append(values.rename(f"Değer_{idx}"))
 
     if not all_series:
         return None
