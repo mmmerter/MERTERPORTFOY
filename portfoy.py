@@ -1059,6 +1059,10 @@ if selected == "Dashboard":
 
             if map_mode == "Günlük Değişim %":
                 color_col = "Gün. %"
+            
+            # Yüzdeleri 1 ondalık basamağa yuvarla (görüntü için)
+            heat_df["Top. %_formatted"] = heat_df["Top. %"].round(1)
+            heat_df["Gün. %_formatted"] = heat_df["Gün. %"].round(1)
 
             # Modern renk skalası için simetrik aralık
             vmax = float(heat_df[color_col].max())
@@ -1068,16 +1072,19 @@ if selected == "Dashboard":
             # Para birimi sembolü
             currency_symbol = "₺" if GORUNUM_PB == "TRY" else "$"
 
+            # Formatlanmış yüzde kolonu seç
+            color_col_formatted = "Top. %_formatted" if color_col == "Top. %" else "Gün. %_formatted"
+            
             # Modern treemap oluştur
             fig = px.treemap(
                 heat_df,
                 path=[px.Constant("Portföy"), "Kod"],
                 values="Değer",
                 color=color_col,
-                custom_data=["Değer", "Top. Kâr/Zarar", color_col, "Kod"],
+                custom_data=["Değer", "Top. Kâr/Zarar", color_col_formatted, "Kod"],
                 color_continuous_scale="RdYlGn",  # Kırmızı-Sarı-Yeşil
                 color_continuous_midpoint=0,
-                hover_data={"Kod": True, "Değer": ":,.0f", color_col: ":.2f"},
+                hover_data={"Kod": True, "Değer": ":,.0f", color_col: ":.1f"},
             )
             
             # Renk aralığını ayarla
@@ -1102,15 +1109,15 @@ if selected == "Dashboard":
                     )
                 )
 
-            # Modern tipografi ve stil - okunabilir yazılar
+            # Modern tipografi ve stil - okunabilir yazılar, büyük kodlar, kısa yüzdeler
             fig.update_traces(
                 textinfo="label+value+percent entry",
-                texttemplate="<b style='font-size:18px; font-family:Inter, sans-serif; color:#ffffff; text-shadow: 2px 2px 4px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8);'>%{label}</b><br>" +
-                            f"<span style='font-size:15px; color:#ffffff; text-shadow: 2px 2px 4px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8);'>%{{customdata[0]:,.0f}} {currency_symbol}</span><br>" +
-                            "<b style='font-size:17px; font-family:Inter, sans-serif; color:#ffffff; text-shadow: 2px 2px 4px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8);'>%{customdata[2]:+.1f}%</b>",
+                texttemplate="<b style='font-size:22px; font-family:Inter, sans-serif; color:#ffffff; text-shadow: 2px 2px 4px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9); font-weight:900;'>%{label}</b><br>" +
+                            f"<span style='font-size:14px; color:#ffffff; text-shadow: 2px 2px 4px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8);'>%{{customdata[0]:,.0f}} {currency_symbol}</span><br>" +
+                            "<b style='font-size:16px; font-family:Inter, sans-serif; color:#ffffff; text-shadow: 2px 2px 4px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9); font-weight:700;'>%{customdata[2]:+.1f}%</b>",
                 textposition="middle center",
                 textfont=dict(
-                    size=18, 
+                    size=22, 
                     family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                     color="#ffffff"
                 ),
@@ -1124,7 +1131,7 @@ if selected == "Dashboard":
                         width=2,
                         color="#1a1c24"
                     ),
-                    pad=dict(t=4, l=4, r=4, b=4),
+                    pad=dict(t=6, l=6, r=6, b=6),
                     cornerradius=4,
                 ),
             )
