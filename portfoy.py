@@ -4,6 +4,7 @@ import pandas as pd
 import time
 import plotly.express as px
 from streamlit_option_menu import option_menu
+from datetime import datetime
 
 # --- MODÜLLER ---
 from utils import (
@@ -1069,11 +1070,49 @@ elif selected == "Ekle/Çıkar":
     # EKLE
     with tab1:
         pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()))
+
+        # Seçilen pazardaki mevcut varlıkları göster
+        try:
+            mevcut = portfoy_df[portfoy_df["Pazar"] == pazar]
+        except Exception:
+            mevcut = pd.DataFrame()
+
+        if not mevcut.empty:
+            st.caption("Bu pazardaki mevcut varlıkların özeti:")
+            st.dataframe(
+                mevcut[["Kod", "Adet", "Maliyet"]].reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("Bu pazarda kayıtlı varlık yok.")
+
         kod = st.text_input("Kod (Örn: BTC, THYAO)").upper()
         c1, c2 = st.columns(2)
         adet = c1.text_input("Adet/Kontrat", "0")
         maliyet = c2.text_input("Giriş Fiyatı", "0")
         if st.button("Kaydet"):
+            a = smart_parse(adet)
+            m = smart_parse(maliyet)
+            if a <= 0 or m <= 0:
+                st.error("Adet ve maliyet pozitif olmalı.")
+            else:
+                new_row = pd.DataFrame(
+                    {
+                        "Kod": [kod],
+                        "Pazar": [pazar],
+                        "Adet": [a],
+                        "Maliyet": [m],
+                        "Tip": ["SPOT"],
+                        "Notlar": [""],
+                    }
+                )
+                portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
+                save_data_to_sheet(portfoy_df)
+                st.success("Kaydedildi!")
+                time.sleep(1)
+                st.rerun()
+
             a = smart_parse(adet)
             m = smart_parse(maliyet)
             if a > 0:
@@ -1122,13 +1161,82 @@ elif selected == "Ekle/Çıkar":
                     time.sleep(1)
                     st.rerun()
 
-    # SİL
+    # SİL / SAT
     with tab3:
-        if not portfoy_df.empty:
-            s = st.selectbox("Silinecek", portfoy_df["Kod"].unique(), key="del")
-            if st.button("🗑️ Sil"):
-                portfoy_df = portfoy_df[portfoy_df["Kod"] != s]
-                save_data_to_sheet(portfoy_df)
-                st.success("Silindi!")
-                time.sleep(1)
-                st.rerun()
+        if portfoy_df.empty:
+            st.info("Portföyde silinecek / satılacak varlık yok.")
+        else:
+            islem_turu = st.radio(
+                "İşlem Türü",
+                ["Sil", "Sat (Satış Kaydı Oluştur)"],
+                horizontal=True,
+            )
+
+            if islem_turu == "Sil":
+                s = st.selectbox("Silinecek Kod", portfoy_df["Kod"].unique(), key="del")
+                if st.button("🗑️ Sil"):
+                    portfoy_df = portfoy_df[portfoy_df["Kod"] != s]
+                    save_data_to_sheet(portfoy_df)
+                    st.success("Silindi!")
+                    time.sleep(1)
+                    st.rerun()
+
+            else:  # Satış Kaydı
+                kodlar = portfoy_df["Kod"].unique()
+                kod_sec = st.selectbox("Satılacak Kod", kodlar, key="sell_code")
+
+                secili = portfoy_df[portfoy_df["Kod"] == kod_sec].iloc[0]
+                mevcut_adet = smart_parse(secili["Adet"])
+                birim_maliyet = smart_parse(secili["Maliyet"])
+                pazar = secili["Pazar"]
+
+                st.write(f"Mevcut Adet: **{mevcut_adet}**")
+                st.write(f"Birim Maliyet: **{birim_maliyet}**")
+
+                c1, c2 = st.columns(2)
+                sat_adet_str = c1.text_input("Satılacak Adet", str(mevcut_adet))
+                satis_fiyat_str = c2.text_input("Satış Fiyatı (Birim)", "0")
+
+                if st.button("💰 Satışı Kaydet"):
+                    sat_adet = smart_parse(sat_adet_str)
+                    satis_fiyat = smart_parse(satis_fiyat_str)
+
+                    if sat_adet <= 0 or satis_fiyat <= 0:
+                        st.error("Satış adedi ve fiyatı pozitif olmalı.")
+                    elif sat_adet > mevcut_adet:
+                        st.error("Satılacak adet mevcut adetten fazla olamaz.")
+                    else:
+                        # Hesaplar
+                        toplam_satis = sat_adet * satis_fiyat
+                        maliyet_tutar = sat_adet * birim_maliyet
+                        kar_zarar = toplam_satis - maliyet_tutar
+
+                        # Satış kaydını Sheets'e yaz
+                        add_sale_record(
+                            datetime.now().date(),
+                            kod_sec,
+                            pazar,
+                            sat_adet,
+                            satis_fiyat,
+                            maliyet_tutar,
+                            kar_zarar,
+                        )
+
+                        # Portföyde adeti güncelle / sıfırsa satır sil
+                        kalan_adet = mevcut_adet - sat_adet
+                        if kalan_adet <= 0:
+                            portfoy_df = portfoy_df[portfoy_df["Kod"] != kod_sec]
+                        else:
+                            portfoy_df.loc[
+                                portfoy_df["Kod"] == kod_sec, "Adet"
+                            ] = kalan_adet
+
+                        save_data_to_sheet(portfoy_df)
+
+                        st.success(
+                            f"Satış kaydedildi. Toplam satış: {toplam_satis:,.2f}, "
+                            f"Maliyet: {maliyet_tutar:,.2f}, Kâr/Zarar: {kar_zarar:,.2f}"
+                        )
+                        time.sleep(1)
+                        st.rerun()
+
