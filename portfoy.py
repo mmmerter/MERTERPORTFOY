@@ -221,13 +221,46 @@ st.markdown(
         background: transparent !important;
     }
     
-    /* Menu item hover effects */
+    /* Menu item hover effects - Enhanced */
     [data-testid="stHorizontalBlock"] > div > div > div > div > div > a {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        position: relative !important;
     }
     
     [data-testid="stHorizontalBlock"] > div > div > div > div > div > a:hover {
-        transform: translateY(-2px) !important;
+        transform: translateY(-3px) scale(1.02) !important;
+    }
+    
+    [data-testid="stHorizontalBlock"] > div > div > div > div > div > a[aria-current="page"] {
+        animation: pulse-glow 2s ease-in-out infinite !important;
+    }
+    
+    @keyframes pulse-glow {
+        0%, 100% {
+            box-shadow: 0 6px 20px rgba(107, 127, 215, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+        50% {
+            box-shadow: 0 8px 25px rgba(107, 127, 215, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+    }
+    
+    /* Icon animations */
+    [data-testid="stHorizontalBlock"] > div > div > div > div > div > a:hover i {
+        transform: scale(1.1) rotate(5deg) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    [data-testid="stHorizontalBlock"] > div > div > div > div > div > a[aria-current="page"] i {
+        animation: icon-bounce 1.5s ease-in-out infinite !important;
+    }
+    
+    @keyframes icon-bounce {
+        0%, 100% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(-3px);
+        }
     }
 </style>
 """,
@@ -288,7 +321,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- MENÜ (6 Buton) - Modern ---
+# --- MENÜ (6 Buton) - Ultra Modern & Farklı ---
 selected = option_menu(
     menu_title=None,
     options=[
@@ -300,51 +333,59 @@ selected = option_menu(
         "Ekle/Çıkar",
     ],
     icons=[
-        "speedometer2",
-        "pie-chart-fill",
-        "eye",
-        "receipt",
-        "newspaper",
-        "gear",
+        "graph-up-arrow",  # Daha modern dashboard ikonu
+        "wallet2",  # Portföy için cüzdan ikonu
+        "binoculars-fill",  # İzleme için dürbün ikonu
+        "cash-stack",  # Satışlar için para yığını ikonu
+        "megaphone-fill",  # Haberler için megafon ikonu
+        "plus-circle-fill",  # Ekle/Çıkar için artı ikonu
     ],
-    menu_icon="cast",
+    menu_icon="app-indicator",
     default_index=0,
     orientation="horizontal",
     styles={
         "container": {
-            "padding": "0!important",
-            "background": "linear-gradient(135deg, #1a1c24 0%, #0e1117 100%)",
-            "border-radius": "12px",
-            "box-shadow": "0 4px 20px rgba(0, 0, 0, 0.4)",
-            "margin-bottom": "20px",
+            "padding": "8px 12px!important",
+            "background": "linear-gradient(135deg, #0f1419 0%, #1a1f2e 50%, #0f1419 100%)",
+            "border-radius": "16px",
+            "box-shadow": "0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+            "margin-bottom": "24px",
+            "border": "1px solid rgba(139, 154, 255, 0.2)",
         },
         "icon": {
             "color": "#8b9aff",
-            "font-size": "20px",
-            "margin-right": "8px",
+            "font-size": "22px",
+            "margin-right": "10px",
+            "transition": "all 0.3s ease",
         },
         "nav-link": {
             "font-size": "15px",
             "text-align": "center",
-            "margin": "0px 4px",
-            "padding": "12px 20px",
-            "border-radius": "10px",
+            "margin": "0px 3px",
+            "padding": "14px 24px",
+            "border-radius": "12px",
             "font-weight": "700",
-            "color": "#b0b3c0",
-            "transition": "all 0.3s ease",
+            "color": "#9ca3af",
+            "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             "background": "transparent",
+            "border": "1px solid transparent",
+            "position": "relative",
         },
         "nav-link:hover": {
-            "background": "rgba(139, 154, 255, 0.1)",
+            "background": "linear-gradient(135deg, rgba(139, 154, 255, 0.15) 0%, rgba(107, 127, 215, 0.1) 100%)",
             "color": "#8b9aff",
-            "transform": "translateY(-2px)",
+            "transform": "translateY(-3px) scale(1.02)",
+            "border": "1px solid rgba(139, 154, 255, 0.3)",
+            "box-shadow": "0 4px 12px rgba(139, 154, 255, 0.2)",
         },
         "nav-link-selected": {
-            "background": "linear-gradient(135deg, #6b7fd7 0%, #8b9aff 100%)",
+            "background": "linear-gradient(135deg, #6b7fd7 0%, #8b9aff 50%, #a8b5ff 100%)",
             "color": "#ffffff",
-            "box-shadow": "0 4px 15px rgba(107, 127, 215, 0.4)",
+            "box-shadow": "0 6px 20px rgba(107, 127, 215, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
             "font-weight": "900",
-            "border": "none",
+            "border": "1px solid rgba(255, 255, 255, 0.2)",
+            "transform": "translateY(-2px)",
+            "text-shadow": "0 1px 2px rgba(0, 0, 0, 0.2)",
         },
     },
 )
