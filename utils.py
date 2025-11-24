@@ -10,6 +10,7 @@ ANALYSIS_COLS = [
     "Maliyet",
     "Fiyat",
     "PB",
+    "Yatırılan",
     "Değer",
     "Top. Kâr/Zarar",
     "Top. %",

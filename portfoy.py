@@ -1179,6 +1179,7 @@ def run_analysis(df, usd_try_rate, view_currency):
                 "Maliyet": maliyet,
                 "Fiyat": f_g,
             "PB": view_currency,
+                "Yatırılan": c_g,  # Yatırılan para = Adet * Maliyet (view_currency'de)
                 "Değer": v_g,
                 "Top. Kâr/Zarar": pnl,
                 "Top. %": pnl_pct,
