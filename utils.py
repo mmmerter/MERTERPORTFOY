@@ -36,6 +36,7 @@ KNOWN_FUNDS = [
     "IPB",
     "KZL",
     "RPD",
+    "URA",
 ]
 
 MARKET_DATA = {
