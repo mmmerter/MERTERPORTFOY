@@ -92,15 +92,35 @@ st.markdown(
         position: relative;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     }
+    .ticker-label {
+        position: absolute;
+        left: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 10;
+        background: rgba(26, 28, 36, 0.95);
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid #2f3440;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: #6b7fd7;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        pointer-events: none;
+    }
     .market-ticker {
         background: linear-gradient(135deg, #0e1117 0%, #1a1c24 100%);
         border-bottom: 1px solid #2f3440;
         padding: 10px 0;
+        padding-left: 120px;
     }
     .portfolio-ticker {
         background: linear-gradient(135deg, #1a1c24 0%, #0e1117 100%);
         border-bottom: 2px solid #6b7fd7;
         padding: 10px 0;
+        padding-left: 120px;
         margin-bottom: 20px;
     }
     .ticker-text {
@@ -286,8 +306,14 @@ st.markdown(
         .ticker-container {
             margin-bottom: 12px !important;
         }
+        .ticker-label {
+            left: 8px !important;
+            padding: 4px 8px !important;
+            font-size: 11px !important;
+        }
         .market-ticker, .portfolio-ticker {
             padding: 8px 0 !important;
+            padding-left: 90px !important;
         }
         .ticker-text span {
             font-size: 10px !important;
@@ -462,6 +488,14 @@ st.markdown(
             margin-right: 3px !important;
         }
         
+        .ticker-label {
+            left: 6px !important;
+            padding: 3px 6px !important;
+            font-size: 10px !important;
+        }
+        .market-ticker, .portfolio-ticker {
+            padding-left: 80px !important;
+        }
         .ticker-text span {
             font-size: 9px !important;
             padding: 2px 4px !important;
@@ -562,8 +596,14 @@ sym = "₺" if GORUNUM_PB == "TRY" else "$"
 mh, ph = get_tickers_data(portfoy_df, USD_TRY)
 st.markdown(
     f"""
-<div class="ticker-container market-ticker">{mh}</div>
-<div class="ticker-container portfolio-ticker">{ph}</div>
+<div class="ticker-container market-ticker">
+    <div class="ticker-label">🌍 PİYASA</div>
+    {mh}
+</div>
+<div class="ticker-container portfolio-ticker">
+    <div class="ticker-label">💼 PORTFÖY</div>
+    {ph}
+</div>
 """,
     unsafe_allow_html=True,
 )

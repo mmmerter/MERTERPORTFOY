@@ -292,8 +292,8 @@ def get_tickers_data(df_portfolio, usd_try):
                 portfolio_symbols[row["Kod"]] = get_yahoo_symbol(row["Kod"], row["Pazar"])
     
     all_fetch = list(set([s[1] for s in market_symbols] + list(portfolio_symbols.values())))
-    market_html = '<span style="color:#6b7fd7; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">🌍 PİYASA</span> &nbsp;'
-    portfolio_html = '<span style="color:#6b7fd7; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">💼 PORTFÖY</span> &nbsp;'
+    market_html = ''
+    portfolio_html = ''
 
     try:
         yahoo_data = yf.Tickers(" ".join(all_fetch))
