@@ -14,6 +14,7 @@ def render_pie_bar_charts(
     all_tab: bool = False,
     varlik_gorunumu: str = "YÜZDE (%)",
     total_spot_deger: float = 0.0,
+    show_companies: bool = False,
 ) -> None:
     """
     Modern donut + bar kombinasyonu.
@@ -47,6 +48,13 @@ def render_pie_bar_charts(
     # Metin kolonları
     label_col = group_col
     grouped["Label"] = grouped[label_col].astype(str)
+    
+    # Şirket listesi için custom_data hazırla (sadece sektör grafikleri için)
+    # "Kod" kolonu merge ile eklenmiş olmalı
+    if show_companies and "Kod" in grouped.columns:
+        grouped["SirketListesi"] = grouped["Kod"].fillna("").astype(str)
+    else:
+        grouped["SirketListesi"] = ""
 
     # Modern renk paleti - profesyonel ve tutarlı
     modern_colors = [
@@ -67,6 +75,20 @@ def render_pie_bar_charts(
 
     # --- Donut (Pie) - Modern ve Profesyonel ---
     with col_pie:
+        # Hover template'i hazırla
+        if show_companies and "SirketListesi" in grouped.columns:
+            # Şirket listesi varsa hover template'e ekle
+            hover_template = "<b style='font-family: Inter, sans-serif; font-size: 14px;'>%{label}</b><br>" + \
+                            "<span style='color: #6b7fd7;'>Değer:</span> <b>%{value:,.0f}</b><br>" + \
+                            "<span style='color: #6b7fd7;'>Pay:</span> <b>%{percent:.1%}</b><br>" + \
+                            "<span style='color: #6b7fd7;'>Şirketler:</span> <span style='font-size: 12px;'>%{customdata}</span><extra></extra>"
+            customdata_list = grouped["SirketListesi"].tolist()
+        else:
+            hover_template = "<b style='font-family: Inter, sans-serif; font-size: 14px;'>%{label}</b><br>" + \
+                            "<span style='color: #6b7fd7;'>Değer:</span> <b>%{value:,.0f}</b><br>" + \
+                            "<span style='color: #6b7fd7;'>Pay:</span> <b>%{percent:.1%}</b><extra></extra>"
+            customdata_list = None
+        
         fig_pie = go.Figure(
             data=[
                 go.Pie(
@@ -84,9 +106,8 @@ def render_pie_bar_charts(
                         size=12,
                         color="#ffffff",
                     ),
-                    hovertemplate="<b style='font-family: Inter, sans-serif; font-size: 14px;'>%{label}</b><br>" +
-                                  "<span style='color: #6b7fd7;'>Değer:</span> <b>%{value:,.0f}</b><br>" +
-                                  "<span style='color: #6b7fd7;'>Pay:</span> <b>%{percent:.1%}</b><extra></extra>",
+                    hovertemplate=hover_template,
+                    customdata=customdata_list if customdata_list else None,
                 )
             ]
         )

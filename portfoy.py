@@ -1620,12 +1620,16 @@ if selected == "Dashboard":
                 sektor_grouped = sektor_df.groupby("Sektör", as_index=False).agg(
                     {"Değer": "sum", "Top. Kâr/Zarar": "sum"}
                 )
+                # Her sektör için şirket listesini hazırla
+                sektor_sirketler = sektor_df.groupby("Sektör")["Kod"].apply(lambda x: ", ".join(x.unique())).reset_index()
+                sektor_grouped = sektor_grouped.merge(sektor_sirketler, on="Sektör", how="left")
                 render_pie_bar_charts(
                     sektor_grouped,
                     "Sektör",
                     all_tab=False,
                     varlik_gorunumu=VARLIK_GORUNUMU,
                     total_spot_deger=TOTAL_SPOT_DEGER,
+                    show_companies=True,  # Şirket listesini göster
                 )
             else:
                 st.info("Sektör bilgisi bulunamadı.")
@@ -1715,12 +1719,16 @@ elif selected == "Portföy":
                 sektor_grouped = sektor_bist.groupby("Sektör", as_index=False).agg(
                     {"Değer": "sum", "Top. Kâr/Zarar": "sum"}
                 )
+                # Her sektör için şirket listesini hazırla
+                sektor_sirketler = sektor_bist.groupby("Sektör")["Kod"].apply(lambda x: ", ".join(x.unique())).reset_index()
+                sektor_grouped = sektor_grouped.merge(sektor_sirketler, on="Sektör", how="left")
                 render_pie_bar_charts(
                     sektor_grouped,
                     "Sektör",
                     all_tab=False,
                     varlik_gorunumu=VARLIK_GORUNUMU,
                     total_spot_deger=TOTAL_SPOT_DEGER,
+                    show_companies=True,  # Şirket listesini göster
                 )
             else:
                 st.info("Sektör bilgisi bulunamadı.")
@@ -1779,12 +1787,16 @@ elif selected == "Portföy":
                 sektor_grouped = sektor_abd.groupby("Sektör", as_index=False).agg(
                     {"Değer": "sum", "Top. Kâr/Zarar": "sum"}
                 )
+                # Her sektör için şirket listesini hazırla
+                sektor_sirketler = sektor_abd.groupby("Sektör")["Kod"].apply(lambda x: ", ".join(x.unique())).reset_index()
+                sektor_grouped = sektor_grouped.merge(sektor_sirketler, on="Sektör", how="left")
                 render_pie_bar_charts(
                     sektor_grouped,
                     "Sektör",
                     all_tab=False,
                     varlik_gorunumu=VARLIK_GORUNUMU,
                     total_spot_deger=TOTAL_SPOT_DEGER,
+                    show_companies=True,  # Şirket listesini göster
                 )
             else:
                 st.info("Sektör bilgisi bulunamadı.")
