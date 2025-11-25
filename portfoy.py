@@ -2155,7 +2155,6 @@ elif selected == "Ekle/Çıkar":
                     }
                 )
                 portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
-
                 save_data_to_sheet(portfoy_df)
 
                 st.success(
@@ -2190,7 +2189,6 @@ elif selected == "Ekle/Çıkar":
                     portfoy_df = pd.concat(
                         [portfoy_df, new_row], ignore_index=True
                     )
-
                     save_data_to_sheet(portfoy_df)
                     st.success("Güncellendi!")
                     time.sleep(1)
