@@ -1429,7 +1429,14 @@ if selected == "Dashboard":
 
             history_df = read_portfolio_history()
             history_fon = read_history_fon()
-            kpi_timeframe = get_timeframe_changes(history_df, subtract_df=history_fon)
+            if not history_fon.empty and "Tarih" in history_fon.columns:
+                history_fon_filtered = history_fon.copy()
+                history_fon_filtered["Tarih"] = pd.to_datetime(history_fon_filtered["Tarih"])
+                today_cutoff = pd.Timestamp.today().normalize()
+                history_fon_filtered = history_fon_filtered[history_fon_filtered["Tarih"] < today_cutoff]
+            else:
+                history_fon_filtered = history_fon
+            kpi_timeframe = get_timeframe_changes(history_df, subtract_df=history_fon_filtered)
         except Exception:
             kpi_timeframe = None
 
