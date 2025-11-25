@@ -559,13 +559,16 @@ def write_portfolio_history(value_try, value_usd):
         pass
 
 
-def get_timeframe_changes(history_df, fon_current_value_try=0.0):
+def get_timeframe_changes(history_df, fon_current_value_try=0.0, fon_current_value_today_try=0.0):
     """
     Haftalık / Aylık / YTD gerçek K/Z hesaplar.
     history_df: read_portfolio_history() çıktısı
-    fon_current_value_try: Fonların bugünkü değeri (TRY) - haftalık/aylık/YTD hesaplarından çıkarılacak
-    Mantık: Geçmiş kayıtlarda fonların değeri zaten çıkarılmış durumda kaydediliyor.
-    Bugünkü değerden de fonların bugünkü değerini çıkarıyoruz, böylece sadece bugünden sonraki değişimler takip ediliyor.
+    fon_current_value_try: Fonların bugünkü değeri (TRY) - geçmiş kayıtlarda çıkarılmış
+    fon_current_value_today_try: Fonların bugünkü değeri (TRY) - bugünkü kayıtta çıkarılacak
+    Mantık: 
+    - Geçmiş kayıtlarda fonların değeri zaten çıkarılmış durumda kaydediliyor
+    - Bugünkü değerden de fonların bugünkü değerini çıkarıyoruz (nötr etki)
+    - Böylece fonların bugünden sonraki değişimleri takip edilecek
     Dönüş:
       {
         "weekly": (değer, yüzde),
@@ -590,10 +593,10 @@ def get_timeframe_changes(history_df, fon_current_value_try=0.0):
     if "Değer_TRY" not in df.columns:
         return None
 
-    # Bugünkü değerden fonların bugünkü değerini çıkar
+    # Bugünkü değerden fonların bugünkü değerini çıkar (nötr etki)
     # Geçmiş kayıtlarda zaten çıkarılmış durumda, sadece bugünkü kayıt için çıkarıyoruz
     today_val_raw = float(df["Değer_TRY"].iloc[-1])
-    today_val = today_val_raw - float(fon_current_value_try)
+    today_val = today_val_raw - float(fon_current_value_today_try)
     
     dates = df["Tarih"]
 
