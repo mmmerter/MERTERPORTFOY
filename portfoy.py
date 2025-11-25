@@ -1406,15 +1406,29 @@ if selected == "Dashboard":
         # Gerçek Haftalık / Aylık / YTD KPI için tarihsel log güncelle
         kpi_timeframe = None
         try:
+            fon_mask = spot_only["Pazar"].astype(str).str.contains("FON", case=False, na=False)
+            fon_total_value = spot_only.loc[fon_mask, "Değer"].sum()
+            fon_total_cost = spot_only.loc[fon_mask, "Yatırılan"].sum()
+
             if GORUNUM_PB == "TRY":
                 total_try = float(t_v)
                 total_usd = float(t_v / USD_TRY) if USD_TRY else 0.0
+                fon_profit_try = float(fon_total_value - fon_total_cost)
             else:
                 total_usd = float(t_v)
-                total_try = float(t_v * USD_TRY)
+                total_try = float(t_v * USD_TRY) if USD_TRY else 0.0
+                fon_profit_try = float((fon_total_value - fon_total_cost) * (USD_TRY or 0.0))
+
+            # Fon kârını haftalık/aylık/YTD hesaplarından çıkar, toplam değeri bozma
+            fon_profit_try = 0.0 if pd.isna(fon_profit_try) else fon_profit_try
+            history_try = max(total_try - fon_profit_try, 0.0)
+            if USD_TRY:
+                history_usd = float(history_try / USD_TRY)
+            else:
+                history_usd = total_usd
 
             # Günlük portföy logunu yaz (aynı günse data_loader içinde atlanıyor)
-            write_portfolio_history(total_try, total_usd)
+            write_portfolio_history(history_try, history_usd)
 
             history_df = read_portfolio_history()
             kpi_timeframe = get_timeframe_changes(history_df)
