@@ -53,13 +53,6 @@ st.set_page_config(
     layout="wide",
     page_icon="🏦",
     initial_sidebar_state="collapsed",
-    theme={
-        "primaryColor": "#6b7fd7",
-        "backgroundColor": "#0e1117",
-        "secondaryBackgroundColor": "#1a1c24",
-        "textColor": "#ffffff",
-        "font": "Inter, sans-serif",
-    },
 )
 
 # --- CSS ---
