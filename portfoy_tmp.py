@@ -531,7 +531,7 @@ with theme_selector_cols[1]:
     toggle_label = "🌞 Açık Tema" if st.session_state["ui_theme"] == "dark" else "🌙 Koyu Tema"
     if st.button(toggle_label, key="theme_toggle_button"):
         st.session_state["ui_theme"] = "light" if st.session_state["ui_theme"] == "dark" else "dark"
-        st.experimental_rerun()
+        st.rerun()
 
 inject_theme_css(st.session_state["ui_theme"])
 
