@@ -26,6 +26,7 @@ from data_loader import (
     get_tefas_data,
     get_binance_positions,
     get_binance_futures_price,
+    sync_binance_futures_to_portfolio,
     read_portfolio_history,
     write_portfolio_history,
     get_timeframe_changes,
@@ -775,12 +776,25 @@ def render_news_section(name, key):
 
 
 # --- ANA DATA ---
+# Binance Futures otomatik senkronizasyonu
+if "binance_sync_done" not in st.session_state:
+    with st.spinner("Binance Futures pozisyonları senkronize ediliyor..."):
+        sync_count, sync_error = sync_binance_futures_to_portfolio()
+        if sync_error:
+            # Hata varsa sadece log'la, kullanıcıyı rahatsız etme
+            pass
+        else:
+            if sync_count > 0:
+                st.session_state["binance_sync_done"] = True
+                # Cache'i temizle ki yeni veriler yüklensin
+                get_data_from_sheet.clear()
+
 portfoy_df = get_data_from_sheet()
 
 # --- HEADER (B ŞIKKI – Hafif renkli kart + Para Birimi) ---
 with st.container():
     st.markdown('<div class="kral-header">', unsafe_allow_html=True)
-    c_title, c_toggle = st.columns([3, 1])
+    c_title, c_toggle, c_sync = st.columns([2.5, 1, 0.5])
     with c_title:
         st.markdown(
             "<div class='kral-header-title'>🏦 MERTER VARLIK TAKİP BOTU</div>",
@@ -793,6 +807,19 @@ with st.container():
     with c_toggle:
         st.write("")
         GORUNUM_PB = st.radio("Para Birimi:", ["TRY", "USD"], horizontal=True)
+    with c_sync:
+        st.write("")
+        if st.button("🔄", help="Binance Futures Senkronizasyonu", key="manual_sync"):
+            sync_binance_futures_to_portfolio.clear()  # Cache'i temizle
+            sync_count, sync_error = sync_binance_futures_to_portfolio()
+            if sync_error:
+                st.error(sync_error)
+            else:
+                st.success(f"{sync_count} pozisyon senkronize edildi!")
+                st.session_state["binance_sync_done"] = True
+                get_data_from_sheet.clear()
+                time.sleep(1)
+                st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 USD_TRY = get_usd_try()
