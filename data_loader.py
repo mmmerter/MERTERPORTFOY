@@ -549,6 +549,9 @@ def get_timeframe_changes(history_df, subtract_df=None):
         if "Tarih" not in sub.columns:
             return None
         sub["Tarih"] = pd.to_datetime(sub["Tarih"])
+        # Fon katkısını bugüne kadar olan geçmişten çıkarmak için bugünden sonrasını bırakma
+        today = pd.Timestamp.today().normalize()
+        sub = sub[sub["Tarih"] < today]
         sub = sub.sort_values("Tarih")
         if "Değer_TRY" not in sub.columns:
             sub["Değer_TRY"] = 0.0
