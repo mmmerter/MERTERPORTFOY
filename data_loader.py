@@ -559,17 +559,10 @@ def write_portfolio_history(value_try, value_usd):
         pass
 
 
-def get_timeframe_changes(history_df, fon_current_value_try=0.0):
+def get_timeframe_changes(history_df):
     """
     Haftalık / Aylık / YTD gerçek K/Z hesaplar.
     history_df: read_portfolio_history() çıktısı
-    fon_current_value_try: Fonların bugünkü değeri (TRY) - sadece bilgi amaçlı, kullanılmıyor
-    Mantık: 
-    - Geçmiş kayıtlarda fonların değeri zaten çıkarılmış durumda kaydediliyor
-    - Bugünkü kayıtta da fonların değeri çıkarılmış durumda kaydediliyor
-    - Haftalık/aylık/YTD hesaplamalarında: Sadece fon olmayan varlıkların değişimini takip ediyoruz
-    - Fonların bugünkü etkisi nötr (çünkü hem geçmiş hem bugünkü kayıtta çıkarılmış)
-    - Fonların bugünden sonraki değişimleri otomatik olarak takip edilecek (yeni kayıtlar geldiğinde)
     Dönüş:
       {
         "weekly": (değer, yüzde),
