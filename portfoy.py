@@ -1483,8 +1483,9 @@ if selected == "Dashboard":
             write_portfolio_history(history_try, history_usd)
 
             history_df = read_portfolio_history()
-            # Fonların bugünkü değerini parametre olarak geç (haftalık/aylık/YTD hesaplarından çıkarılacak)
-            kpi_timeframe = get_timeframe_changes(history_df, fon_current_value_try=fon_total_value_try)
+            # Geçmiş kayıtlarda fonların değeri zaten çıkarılmış durumda kaydediliyor
+            # Bu yüzden get_timeframe_changes'de tekrar çıkarmaya gerek yok
+            kpi_timeframe = get_timeframe_changes(history_df)
         except Exception:
             kpi_timeframe = None
 
