@@ -518,10 +518,12 @@ def write_portfolio_history(value_try, value_usd):
         pass
 
 
-def get_timeframe_changes(history_df):
+def get_timeframe_changes(history_df, subtract_df=None):
     """
     Haftalık / Aylık / YTD gerçek K/Z hesaplar.
     history_df: read_portfolio_history() çıktısı
+    subtract_df: Opsiyonel - aynı formatta bir dataframe (ör: FON geçmişi). Sağlanırsa ilgili
+                 tarihlerdeki değerler düşülür; toplam K/Z hesapları bu net değer üzerinden yapılır.
     Dönüş:
       {
         "weekly": (değer, yüzde),
@@ -538,8 +540,29 @@ def get_timeframe_changes(history_df):
     # Tarih kolonu garanti olsun
     if "Tarih" not in history_df.columns:
         return None
-    df = history_df.copy().sort_values("Tarih")
+    df = history_df.copy()
     df["Tarih"] = pd.to_datetime(df["Tarih"])
+    df = df.sort_values("Tarih")
+
+    if subtract_df is not None and not subtract_df.empty:
+        sub = subtract_df.copy()
+        if "Tarih" not in sub.columns:
+            return None
+        sub["Tarih"] = pd.to_datetime(sub["Tarih"])
+        sub = sub.sort_values("Tarih")
+        if "Değer_TRY" not in sub.columns:
+            sub["Değer_TRY"] = 0.0
+        if "Değer_USD" not in sub.columns:
+            sub["Değer_USD"] = 0.0
+        sub = sub[["Tarih", "Değer_TRY", "Değer_USD"]].rename(
+            columns={"Değer_TRY": "Sub_TRY", "Değer_USD": "Sub_USD"}
+        )
+        df = df.merge(sub, on="Tarih", how="left")
+        df["Sub_TRY"] = df["Sub_TRY"].fillna(0.0)
+        df["Sub_USD"] = df["Sub_USD"].fillna(0.0)
+        df["Değer_TRY"] = (df["Değer_TRY"] - df["Sub_TRY"]).clip(lower=0.0)
+        df["Değer_USD"] = (df["Değer_USD"] - df["Sub_USD"]).clip(lower=0.0)
+        df.drop(columns=["Sub_TRY", "Sub_USD"], inplace=True)
 
     # Ana seri: TRY bazlı toplam
     if "Değer_TRY" not in df.columns:

@@ -1416,8 +1416,20 @@ if selected == "Dashboard":
             # Günlük portföy logunu yaz (aynı günse data_loader içinde atlanıyor)
             write_portfolio_history(total_try, total_usd)
 
+            # Fon toplamını ayrıca logla (haftalık/aylık hesaplardan düşebilmek için)
+            fon_mask = spot_only["Pazar"].astype(str).str.contains("FON", case=False, na=False)
+            fon_total_view = float(spot_only.loc[fon_mask, "Değer"].sum()) if fon_mask.any() else 0.0
+            if GORUNUM_PB == "TRY":
+                fon_try = fon_total_view
+                fon_usd = fon_total_view / USD_TRY if USD_TRY else 0.0
+            else:
+                fon_usd = fon_total_view
+                fon_try = fon_total_view * USD_TRY
+            write_history_fon(fon_try, fon_usd)
+
             history_df = read_portfolio_history()
-            kpi_timeframe = get_timeframe_changes(history_df)
+            history_fon = read_history_fon()
+            kpi_timeframe = get_timeframe_changes(history_df, subtract_df=history_fon)
         except Exception:
             kpi_timeframe = None
 
