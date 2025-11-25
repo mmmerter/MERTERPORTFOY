@@ -40,6 +40,22 @@ from data_loader import (
     write_history_nakit,
 )
 
+import pandas as pd
+
+# Fon getirilerinin yeniden dahil edilme tarihi (varsayılan: 2025-11-25)
+def _init_fon_reset_date():
+    default_date = "2025-11-25"
+    try:
+        raw = st.secrets.get("fon_metric_reset_date", default_date)
+    except Exception:
+        raw = default_date
+    try:
+        return pd.to_datetime(raw).tz_localize(None)
+    except Exception:
+        return pd.to_datetime(default_date).tz_localize(None)
+
+FON_METRIC_RESET_DATE = _init_fon_reset_date()
+
 from charts import (
     render_pie_bar_charts,
     render_pazar_tab,
@@ -1431,12 +1447,13 @@ if selected == "Dashboard":
             history_fon = read_history_fon()
             if not history_fon.empty and "Tarih" in history_fon.columns:
                 history_fon_filtered = history_fon.copy()
-                history_fon_filtered["Tarih"] = pd.to_datetime(history_fon_filtered["Tarih"])
-                today_cutoff = pd.Timestamp.today().normalize()
-                history_fon_filtered = history_fon_filtered[history_fon_filtered["Tarih"] < today_cutoff]
             else:
                 history_fon_filtered = history_fon
-            kpi_timeframe = get_timeframe_changes(history_df, subtract_df=history_fon_filtered)
+            kpi_timeframe = get_timeframe_changes(
+                history_df,
+                subtract_df=history_fon_filtered,
+                subtract_before=FON_METRIC_RESET_DATE,
+            )
         except Exception:
             kpi_timeframe = None
 

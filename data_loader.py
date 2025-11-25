@@ -518,12 +518,15 @@ def write_portfolio_history(value_try, value_usd):
         pass
 
 
-def get_timeframe_changes(history_df, subtract_df=None):
+def get_timeframe_changes(history_df, subtract_df=None, subtract_before=None):
     """
     Haftalık / Aylık / YTD gerçek K/Z hesaplar.
     history_df: read_portfolio_history() çıktısı
     subtract_df: Opsiyonel - aynı formatta bir dataframe (ör: FON geçmişi). Sağlanırsa ilgili
                  tarihlerdeki değerler düşülür; toplam K/Z hesapları bu net değer üzerinden yapılır.
+    subtract_before: Opsiyonel pandas Timestamp. Belirtilirse subtract_df içindeki sadece bu tarihten
+                     önceki kayıtlar düşülür (ör: fon getirilerini geçmişten silip bugünden itibaren
+                     yeniden dahil etmek için).
     Dönüş:
       {
         "weekly": (değer, yüzde),
@@ -550,6 +553,8 @@ def get_timeframe_changes(history_df, subtract_df=None):
             return None
         sub["Tarih"] = pd.to_datetime(sub["Tarih"])
         sub = sub.sort_values("Tarih")
+        if subtract_before is not None:
+            sub = sub[sub["Tarih"] < subtract_before]
         if "Değer_TRY" not in sub.columns:
             sub["Değer_TRY"] = 0.0
         if "Değer_USD" not in sub.columns:
