@@ -49,16 +49,29 @@ from charts import (
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(
-    page_title="Merter’in Terminali",
+    page_title="Merter'in Terminali",
     layout="wide",
     page_icon="🏦",
     initial_sidebar_state="collapsed",
+    theme={
+        "primaryColor": "#6b7fd7",
+        "backgroundColor": "#0e1117",
+        "secondaryBackgroundColor": "#1a1c24",
+        "textColor": "#ffffff",
+        "font": "Inter, sans-serif",
+    },
 )
 
 # --- CSS ---
 st.markdown(
     """
 <style>
+    /* Dark Mode - Ana Arka Plan */
+    .stApp {
+        background-color: #0e1117 !important;
+        color: #ffffff !important;
+    }
+    
     /* Streamlit Header Gizle */
     header { visibility: hidden; height: 0px; }
     
@@ -68,6 +81,45 @@ st.markdown(
         padding-top: 1rem;
         padding-left: 0 !important;
         padding-right: 0 !important;
+        background-color: #0e1117 !important;
+    }
+    
+    /* Dark Mode - Tüm metinler */
+    body, p, h1, h2, h3, h4, h5, h6, span, div, label {
+        color: #ffffff !important;
+    }
+    
+    /* Dark Mode - Input alanları */
+    .stTextInput > div > div > input,
+    .stSelectbox > div > div > select,
+    .stNumberInput > div > div > input {
+        background-color: #1a1c24 !important;
+        color: #ffffff !important;
+        border-color: #2f3440 !important;
+    }
+    
+    /* Dark Mode - Radio butonlar */
+    .stRadio > div > label {
+        color: #ffffff !important;
+    }
+    
+    /* Dark Mode - Tablo arka planları */
+    .stDataFrame {
+        background-color: #1a1c24 !important;
+    }
+    
+    /* Dark Mode - Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #1a1c24 !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        color: #b0b3c0 !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        color: #6b7fd7 !important;
+        background-color: #0e1117 !important;
     }
 
     /* Metric Kutuları */
