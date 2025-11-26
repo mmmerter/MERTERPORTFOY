@@ -95,7 +95,7 @@ FON_METRIC_RESET_DATE = _init_fon_reset_date()
 if "ui_theme" not in st.session_state:
     st.session_state["ui_theme"] = "dark"
 
-# Otomatik yenileme kaldırıldı - artık sadece sayaç var
+# Otomatik yenileme: Her 2 dakikada bir sayfa yenilenir
 
 theme_selector_cols = st.columns([0.85, 0.15])
 with theme_selector_cols[0]:
@@ -821,6 +821,19 @@ LIGHT_OVERRIDE_CSS = """
 
 if st.session_state["ui_theme"] == "light":
     st.markdown(LIGHT_OVERRIDE_CSS, unsafe_allow_html=True)
+
+# Otomatik yenileme JavaScript kodu (her 2 dakikada bir)
+st.markdown(
+    """
+    <script>
+    // Her 2 dakikada (120 saniye) bir sayfayı otomatik yenile
+    setTimeout(function() {
+        window.location.reload();
+    }, 120000); // 120000 milisaniye = 2 dakika
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
 
 def get_menu_styles(theme: str):
     if theme == "light":
@@ -2924,5 +2937,4 @@ elif selected == "Ekle/Çıkar":
                         time.sleep(1)
                         st.rerun()
 
-# Otomatik yenileme kaldırıldı - sadece sayaç gösterimi var
-# Burada ayrı bir timer'a gerek yok
+# Otomatik yenileme: Sayfa üst kısmındaki JavaScript ile her 2 dakikada bir yenileniyor
