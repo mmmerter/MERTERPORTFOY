@@ -1947,7 +1947,7 @@ def render_daily_winners_losers(df, sym, currency_symbol="₺"):
             winners_df = pd.DataFrame(table_data)
             
             # HTML tablo oluştur - değerleri escape et
-            winners_html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-family: \'Inter\', sans-serif;"><tbody>'
+            winners_html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-family: \'Inter\', sans-serif;"><thead><tr style="border-bottom: 2px solid rgba(0, 230, 118, 0.3);"><th style="padding: 12px; color: #9da1b3; font-weight: 700; font-size: 12px; text-align: left;">Sıra</th><th style="padding: 12px; color: #9da1b3; font-weight: 700; font-size: 12px; text-align: left;">Kod</th><th style="padding: 12px; color: #9da1b3; font-weight: 700; font-size: 12px; text-align: right;">Kâr/Zarar</th><th style="padding: 12px; color: #9da1b3; font-weight: 700; font-size: 12px; text-align: right;">Değişim %</th></tr></thead><tbody>'
             
             for idx, row in winners_df.iterrows():
                 row_color = "rgba(0, 230, 118, 0.05)" if idx % 2 == 0 else "rgba(0, 0, 0, 0)"
@@ -2019,7 +2019,7 @@ def render_daily_winners_losers(df, sym, currency_symbol="₺"):
             losers_df = pd.DataFrame(table_data)
             
             # HTML tablo oluştur - değerleri escape et
-            losers_html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-family: \'Inter\', sans-serif;"><tbody>'
+            losers_html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-family: \'Inter\', sans-serif;"><thead><tr style="border-bottom: 2px solid rgba(255, 82, 82, 0.3);"><th style="padding: 12px; color: #9da1b3; font-weight: 700; font-size: 12px; text-align: left;">Sıra</th><th style="padding: 12px; color: #9da1b3; font-weight: 700; font-size: 12px; text-align: left;">Kod</th><th style="padding: 12px; color: #9da1b3; font-weight: 700; font-size: 12px; text-align: right;">Kâr/Zarar</th><th style="padding: 12px; color: #9da1b3; font-weight: 700; font-size: 12px; text-align: right;">Değişim %</th></tr></thead><tbody>'
             
             for idx, row in losers_df.iterrows():
                 row_color = "rgba(255, 82, 82, 0.05)" if idx % 2 == 0 else "rgba(0, 0, 0, 0)"
