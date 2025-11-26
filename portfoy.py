@@ -2099,127 +2099,139 @@ def get_daily_movers(df, top_n=5):
 
 
 def render_daily_movers_section(df, currency_symbol, top_n=5):
-    """Render günlük kazanan/kaybeden listesini modern ve dikkat çekici HTML kartları olarak göster."""
+    """Render günlük kazanan/kaybeden listesini modern tablo formatında göster."""
     winners, losers = get_daily_movers(df, top_n=top_n)
     if winners.empty and losers.empty:
         st.info("Günlük kazanan/kaybeden verisi bulunamadı.")
         return
 
-    def _fmt_pct(value):
-        try:
-            return f"{float(value):+.2f}%"
-        except (TypeError, ValueError):
-            return "0.00%"
-
-    def _fmt_currency(value):
-        try:
-            return f"{currency_symbol}{float(value):,.0f}"
-        except (TypeError, ValueError):
-            return f"{currency_symbol}0"
-
-    def _get_first_letter(symbol):
-        """Sembolün ilk harfini al."""
-        try:
-            return str(symbol)[0].upper()
-        except Exception:
-            return "?"
-
-    def _escape_html(text):
-        """HTML özel karakterlerini escape et."""
-        if text is None:
-            return ""
-        return (
-            str(text)
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-            .replace("'", "&#x27;")
-        )
-
-    def _build_card(rows, variant, icon, title, direction_icon):
-        """Kart HTML'ini oluştur ve satırlar boşsa bilgilendir."""
-        row_class = "positive" if variant == "positive-card" else "negative"
-        top_count = min(top_n, len(rows))
-        rows_html = ""
-
-        if rows.empty:
-            rows_html = '<div class="daily-mover-empty">📊 Veri bulunamadı</div>'
-        else:
-            row_chunks = []
-            for _, row in rows.iterrows():
-                symbol = str(row.get("Kod", ""))
-                pct_formatted = _fmt_pct(row.get("Günlük %", 0))
-                pl_formatted = _fmt_currency(row.get("Gün. Kâr/Zarar", 0))
-                first_letter = _get_first_letter(symbol)
-                symbol_escaped = _escape_html(symbol)
-                row_chunks.append(
-                    f"""
-                    <div class="daily-mover-row {row_class}">
-                        <div class="daily-mover-symbol">
-                            <span class="daily-mover-symbol-badge">{first_letter}</span>
-                            {symbol_escaped}
-                        </div>
-                        <div class="daily-mover-change">
-                            <span class="daily-mover-change-icon">{direction_icon}</span>
-                            {pct_formatted}
-                        </div>
-                        <div class="daily-mover-pl">{pl_formatted}</div>
-                    </div>
-                    """
-                )
-            rows_html = "\n".join(row_chunks)
-
-        return f"""
-        <div class="daily-movers-card {variant}">
-            <div class="daily-movers-card-header">
-                <div class="daily-movers-card-title">
-                    <span class="daily-movers-card-title-icon">{icon}</span>
-                    {title}
-                </div>
-                <span class="daily-movers-chip">Top {top_count}</span>
-            </div>
-            <div class="daily-movers-card-body">
-                {rows_html}
-            </div>
-        </div>
+    # Başlık
+    st.markdown(
         """
-
-    winners_card = _build_card(
-        winners,
-        variant="positive-card",
-        icon="🏆",
-        title="Günün Kazananları",
-        direction_icon="📈",
-    )
-    losers_card = _build_card(
-        losers,
-        variant="negative-card",
-        icon="⚠️",
-        title="Günün Kaybedenleri",
-        direction_icon="📉",
-    )
-
-    html_block = f"""
-    <div class="daily-movers-section">
-        <h2 style="
-            font-size: 28px;
-            font-weight: 900;
-            color: #ffffff;
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;">
-            <span style="font-size: 32px;">🔥</span>
-            Günün Kazananları / Kaybedenleri
-        </h2>
-        <div class="daily-movers-grid">
-            {winners_card}
-            {losers_card}
+        <div style="margin-bottom: 24px;">
+            <h2 style="font-size: 28px; font-weight: 900; color: #ffffff; margin-bottom: 5px; display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 32px;">🔥</span>
+                Günün Kazananları / Kaybedenleri
+            </h2>
         </div>
-    </div>
-    """
-    st.markdown(html_block, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # İki sütunlu layout
+    col1, col2 = st.columns(2)
+
+    # Günün Kazananları
+    with col1:
+        st.markdown(
+            """
+            <div style="background: linear-gradient(135deg, #1b1f2b 0%, #10131b 100%); 
+                        border-radius: 16px; 
+                        border-top: 4px solid #00e676; 
+                        padding: 20px; 
+                        margin-bottom: 20px;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
+                <h3 style="color: #ffffff; font-size: 20px; font-weight: 900; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 24px;">🏆</span>
+                    Günün Kazananları
+                    <span style="background: rgba(255, 255, 255, 0.1); padding: 4px 12px; border-radius: 12px; font-size: 11px; margin-left: auto;">TOP 5</span>
+                </h3>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        
+        if not winners.empty:
+            # Tablo verilerini hazırla
+            display_winners = winners[["Kod", "Günlük %", "Gün. Kâr/Zarar"]].copy()
+            display_winners.columns = ["Sembol", "Değişim %", "Kâr/Zarar"]
+            
+            # Değerleri formatlı
+            display_winners["Değişim %"] = display_winners["Değişim %"].apply(
+                lambda x: f"+{x:.2f}%" if x > 0 else f"{x:.2f}%"
+            )
+            display_winners["Kâr/Zarar"] = display_winners["Kâr/Zarar"].apply(
+                lambda x: f"{currency_symbol}{x:,.0f}"
+            )
+            
+            # Styled dataframe göster
+            st.dataframe(
+                display_winners,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Sembol": st.column_config.TextColumn(
+                        "Sembol",
+                        width="medium",
+                    ),
+                    "Değişim %": st.column_config.TextColumn(
+                        "Değişim %",
+                        width="small",
+                    ),
+                    "Kâr/Zarar": st.column_config.TextColumn(
+                        "Kâr/Zarar",
+                        width="medium",
+                    ),
+                },
+            )
+        else:
+            st.info("📊 Veri bulunamadı")
+
+    # Günün Kaybedenleri
+    with col2:
+        st.markdown(
+            """
+            <div style="background: linear-gradient(135deg, #1b1f2b 0%, #10131b 100%); 
+                        border-radius: 16px; 
+                        border-top: 4px solid #ff5252; 
+                        padding: 20px; 
+                        margin-bottom: 20px;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
+                <h3 style="color: #ffffff; font-size: 20px; font-weight: 900; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 24px;">⚠️</span>
+                    Günün Kaybedenleri
+                    <span style="background: rgba(255, 255, 255, 0.1); padding: 4px 12px; border-radius: 12px; font-size: 11px; margin-left: auto;">TOP 5</span>
+                </h3>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        
+        if not losers.empty:
+            # Tablo verilerini hazırla
+            display_losers = losers[["Kod", "Günlük %", "Gün. Kâr/Zarar"]].copy()
+            display_losers.columns = ["Sembol", "Değişim %", "Kâr/Zarar"]
+            
+            # Değerleri formatla
+            display_losers["Değişim %"] = display_losers["Değişim %"].apply(
+                lambda x: f"+{x:.2f}%" if x > 0 else f"{x:.2f}%"
+            )
+            display_losers["Kâr/Zarar"] = display_losers["Kâr/Zarar"].apply(
+                lambda x: f"{currency_symbol}{x:,.0f}"
+            )
+            
+            # Styled dataframe göster
+            st.dataframe(
+                display_losers,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Sembol": st.column_config.TextColumn(
+                        "Sembol",
+                        width="medium",
+                    ),
+                    "Değişim %": st.column_config.TextColumn(
+                        "Değişim %",
+                        width="small",
+                    ),
+                    "Kâr/Zarar": st.column_config.TextColumn(
+                        "Kâr/Zarar",
+                        width="medium",
+                    ),
+                },
+            )
+        else:
+            st.info("📊 Veri bulunamadı")
 
 # --- GÖRÜNÜM AYARI ---
 TOTAL_SPOT_DEGER = portfoy_only["Değer"].sum()
