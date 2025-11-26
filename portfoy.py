@@ -2099,7 +2099,7 @@ def get_daily_movers(df, top_n=5):
 
 
 def render_daily_movers_section(df, currency_symbol, top_n=5):
-    """Render günlük kazanan/kaybeden listesini modern ve dikkat çekici HTML tablosu olarak göster."""
+    """Render günlük kazanan/kaybeden listesini modern ve dikkat çekici HTML kartları olarak göster."""
     winners, losers = get_daily_movers(df, top_n=top_n)
     if winners.empty and losers.empty:
         st.info("Günlük kazanan/kaybeden verisi bulunamadı.")
@@ -2118,126 +2118,108 @@ def render_daily_movers_section(df, currency_symbol, top_n=5):
             return f"{currency_symbol}0"
 
     def _get_first_letter(symbol):
-        """Sembolün ilk harfini al"""
+        """Sembolün ilk harfini al."""
         try:
             return str(symbol)[0].upper()
-        except:
+        except Exception:
             return "?"
-    
+
     def _escape_html(text):
-        """HTML özel karakterlerini escape et"""
+        """HTML özel karakterlerini escape et."""
         if text is None:
             return ""
-        return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#x27;")
+        return (
+            str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#x27;")
+        )
 
-    st.markdown('<div class="daily-movers-section">', unsafe_allow_html=True)
-    st.markdown('<h2 style="font-size: 28px; font-weight: 900; color: #ffffff; margin-bottom: 24px; display: flex; align-items: center; gap: 12px;"><span style="font-size: 32px;">🔥</span> Günün Kazananları / Kaybedenleri</h2>', unsafe_allow_html=True)
-    
-    col_pos, col_neg = st.columns(2)
+    def _build_card(rows, variant, icon, title, direction_icon):
+        """Kart HTML'ini oluştur ve satırlar boşsa bilgilendir."""
+        row_class = "positive" if variant == "positive-card" else "negative"
+        top_count = min(top_n, len(rows))
+        rows_html = ""
 
-    with col_pos:
-        # Kazananlar
-        card_class = "positive-card"
-        card_icon = "🏆"
-        card_title = "Günün Kazananları"
-        
-        html_content = f'''
-        <div class="daily-movers-card {card_class}">
-            <div class="daily-movers-card-header">
-                <div class="daily-movers-card-title">
-                    <span class="daily-movers-card-title-icon">{card_icon}</span>
-                    {card_title}
-                </div>
-                <span class="daily-movers-chip">Top {min(top_n, len(winners))}</span>
-            </div>
-            <div class="daily-movers-card-body">
-        '''
-        
-        if winners.empty:
-            html_content += '<div class="daily-mover-empty">📊 Veri bulunamadı</div>'
+        if rows.empty:
+            rows_html = '<div class="daily-mover-empty">📊 Veri bulunamadı</div>'
         else:
-            for idx, row in winners.iterrows():
+            row_chunks = []
+            for _, row in rows.iterrows():
                 symbol = str(row.get("Kod", ""))
-                daily_pct = row.get("Günlük %", 0)
-                daily_pl = row.get("Gün. Kâr/Zarar", 0)
-                
-                pct_formatted = _fmt_pct(daily_pct)
-                pl_formatted = _fmt_currency(daily_pl)
+                pct_formatted = _fmt_pct(row.get("Günlük %", 0))
+                pl_formatted = _fmt_currency(row.get("Gün. Kâr/Zarar", 0))
                 first_letter = _get_first_letter(symbol)
                 symbol_escaped = _escape_html(symbol)
-                
-                html_content += f'''
-                <div class="daily-mover-row positive">
-                    <div class="daily-mover-symbol">
-                        <span class="daily-mover-symbol-badge">{first_letter}</span>
-                        {symbol_escaped}
+                row_chunks.append(
+                    f"""
+                    <div class="daily-mover-row {row_class}">
+                        <div class="daily-mover-symbol">
+                            <span class="daily-mover-symbol-badge">{first_letter}</span>
+                            {symbol_escaped}
+                        </div>
+                        <div class="daily-mover-change">
+                            <span class="daily-mover-change-icon">{direction_icon}</span>
+                            {pct_formatted}
+                        </div>
+                        <div class="daily-mover-pl">{pl_formatted}</div>
                     </div>
-                    <div class="daily-mover-change">
-                        <span class="daily-mover-change-icon">📈</span>
-                        {pct_formatted}
-                    </div>
-                    <div class="daily-mover-pl">{pl_formatted}</div>
-                </div>
-                '''
-        
-        html_content += '''
-            </div>
-        </div>
-        '''
-        st.markdown(html_content, unsafe_allow_html=True)
+                    """
+                )
+            rows_html = "\n".join(row_chunks)
 
-    with col_neg:
-        # Kaybedenler
-        card_class = "negative-card"
-        card_icon = "⚠️"
-        card_title = "Günün Kaybedenleri"
-        
-        html_content = f'''
-        <div class="daily-movers-card {card_class}">
+        return f"""
+        <div class="daily-movers-card {variant}">
             <div class="daily-movers-card-header">
                 <div class="daily-movers-card-title">
-                    <span class="daily-movers-card-title-icon">{card_icon}</span>
-                    {card_title}
+                    <span class="daily-movers-card-title-icon">{icon}</span>
+                    {title}
                 </div>
-                <span class="daily-movers-chip">Top {min(top_n, len(losers))}</span>
+                <span class="daily-movers-chip">Top {top_count}</span>
             </div>
             <div class="daily-movers-card-body">
-        '''
-        
-        if losers.empty:
-            html_content += '<div class="daily-mover-empty">📊 Veri bulunamadı</div>'
-        else:
-            for idx, row in losers.iterrows():
-                symbol = str(row.get("Kod", ""))
-                daily_pct = row.get("Günlük %", 0)
-                daily_pl = row.get("Gün. Kâr/Zarar", 0)
-                
-                pct_formatted = _fmt_pct(daily_pct)
-                pl_formatted = _fmt_currency(daily_pl)
-                first_letter = _get_first_letter(symbol)
-                symbol_escaped = _escape_html(symbol)
-                
-                html_content += f'''
-                <div class="daily-mover-row negative">
-                    <div class="daily-mover-symbol">
-                        <span class="daily-mover-symbol-badge">{first_letter}</span>
-                        {symbol_escaped}
-                    </div>
-                    <div class="daily-mover-change">
-                        <span class="daily-mover-change-icon">📉</span>
-                        {pct_formatted}
-                    </div>
-                    <div class="daily-mover-pl">{pl_formatted}</div>
-                </div>
-                '''
-        
-        html_content += '''
+                {rows_html}
             </div>
         </div>
-        '''
-        st.markdown(html_content, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+        """
+
+    winners_card = _build_card(
+        winners,
+        variant="positive-card",
+        icon="🏆",
+        title="Günün Kazananları",
+        direction_icon="📈",
+    )
+    losers_card = _build_card(
+        losers,
+        variant="negative-card",
+        icon="⚠️",
+        title="Günün Kaybedenleri",
+        direction_icon="📉",
+    )
+
+    html_block = f"""
+    <div class="daily-movers-section">
+        <h2 style="
+            font-size: 28px;
+            font-weight: 900;
+            color: #ffffff;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;">
+            <span style="font-size: 32px;">🔥</span>
+            Günün Kazananları / Kaybedenleri
+        </h2>
+        <div class="daily-movers-grid">
+            {winners_card}
+            {losers_card}
+        </div>
+    </div>
+    """
+    st.markdown(html_block, unsafe_allow_html=True)
 
 # --- GÖRÜNÜM AYARI ---
 TOTAL_SPOT_DEGER = portfoy_only["Değer"].sum()
