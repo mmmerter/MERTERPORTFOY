@@ -1089,14 +1089,16 @@ def get_comparison_chart(df: pd.DataFrame, usd_try_rate: float, pb: str, compari
     
     # Başlangıç çizgisi (100%) - dünün tarihine
     if start_date in portfolio_normalized.index:
-        # Convert pandas Timestamp to Python datetime for Plotly compatibility
-        start_date_dt = pd.Timestamp(start_date).to_pydatetime() if isinstance(start_date, pd.Timestamp) else start_date
+        # Convert pandas Timestamp to milliseconds timestamp for Plotly compatibility
+        # Plotly's annotation_position="top" requires numeric x values for mean calculation
+        start_date_ts = pd.Timestamp(start_date)
+        start_date_ms = int(start_date_ts.timestamp() * 1000)
         fig.add_vline(
-            x=start_date_dt,
+            x=start_date_ms,
             line_dash="dash",
             line_color="#9da1b3",
             opacity=0.5,
-            annotation_text=f"Başlangıç ({start_date.strftime('%d %b')})",
+            annotation_text=f"Başlangıç ({start_date_ts.strftime('%d %b')})",
             annotation_position="top",
         )
     
