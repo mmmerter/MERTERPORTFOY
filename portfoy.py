@@ -94,8 +94,63 @@ FON_METRIC_RESET_DATE = _init_fon_reset_date()
 if "ui_theme" not in st.session_state:
     st.session_state["ui_theme"] = "dark"
 
-theme_selector_cols = st.columns([0.82, 0.18])
+# Otomatik yenileme ayarları
+if "auto_refresh_enabled" not in st.session_state:
+    st.session_state["auto_refresh_enabled"] = True
+if "auto_refresh_interval" not in st.session_state:
+    st.session_state["auto_refresh_interval"] = 60  # Varsayılan 60 saniye
+
+theme_selector_cols = st.columns([0.7, 0.15, 0.15])
+with theme_selector_cols[0]:
+    pass  # Boş alan
 with theme_selector_cols[1]:
+    # Otomatik yenileme kontrolü
+    auto_refresh = st.checkbox(
+        "🔄 Otomatik Yenileme",
+        value=st.session_state["auto_refresh_enabled"],
+        key="auto_refresh_checkbox",
+        help="Verileri belirli aralıklarla otomatik güncelle"
+    )
+    st.session_state["auto_refresh_enabled"] = auto_refresh
+    
+    if auto_refresh:
+        refresh_interval = st.selectbox(
+            "Yenileme Sıklığı",
+            [30, 60, 120, 300],
+            index=1,
+            format_func=lambda x: f"{x//60}dk" if x >= 60 else f"{x}sn",
+            key="refresh_interval_select",
+            help="Verilerin ne sıklıkla güncelleneceği"
+        )
+        st.session_state["auto_refresh_interval"] = refresh_interval
+        
+        # Son yenileme zamanını göster ve kontrol et
+        if "last_refresh_time" not in st.session_state:
+            st.session_state["last_refresh_time"] = time.time()
+        
+        elapsed = int(time.time() - st.session_state["last_refresh_time"])
+        next_refresh = refresh_interval - elapsed
+        
+        if next_refresh > 0:
+            st.caption(f"⏱️ {next_refresh}s sonra yenilenecek")
+        else:
+            # Yenileme zamanı geldi
+            st.session_state["last_refresh_time"] = time.time()
+            # Cache'leri temizle (daha güncel veri için)
+            try:
+                get_data_from_sheet.clear()
+                get_usd_try.clear()
+                get_tickers_data.clear()
+                # Portföy analiz cache'lerini de temizle
+                _fetch_batch_prices_bist_abd.clear()
+                _fetch_batch_prices_crypto.clear()
+                _fetch_batch_prices_emtia.clear()
+                _fetch_sector_info.clear()
+            except Exception:
+                pass  # Cache temizleme hatası önemli değil
+            st.rerun()
+
+with theme_selector_cols[2]:
     toggle_label = "🌞 Açık Tema" if st.session_state["ui_theme"] == "dark" else "🌙 Koyu Tema"
     if st.button(toggle_label, key="theme_toggle_button"):
         st.session_state["ui_theme"] = "light" if st.session_state["ui_theme"] == "dark" else "dark"
@@ -2637,3 +2692,59 @@ elif selected == "Ekle/Çıkar":
                         )
                         time.sleep(1)
                         st.rerun()
+
+# --- OTOMATIK YENİLEME JAVASCRIPT ---
+# Otomatik yenileme aktifse, JavaScript ile belirli aralıklarla sayfayı yenile
+if st.session_state.get("auto_refresh_enabled", True):
+    refresh_interval_ms = st.session_state.get("auto_refresh_interval", 60) * 1000
+    st.markdown(
+        f"""
+        <script>
+        (function() {{
+            // Mevcut timer'ı temizle (çoklu timer'ı önlemek için)
+            if (window.autoRefreshTimer) {{
+                clearInterval(window.autoRefreshTimer);
+            }}
+            
+            // Otomatik yenileme için timer
+            let refreshInterval = {refresh_interval_ms};
+            
+            // Sayfa yüklendiğinde timer'ı başlat
+            function startAutoRefresh() {{
+                window.autoRefreshTimer = setInterval(function() {{
+                    // Streamlit'in kendi rerun mekanizmasını kullan
+                    // Streamlit iframe içinde çalışıyorsa parent'a mesaj gönder
+                    if (window.parent && window.parent !== window) {{
+                        try {{
+                            window.parent.postMessage({{
+                                type: 'streamlit:rerun'
+                            }}, '*');
+                        }} catch(e) {{
+                            // Fallback: sayfayı yenile
+                            window.location.reload();
+                        }}
+                    }} else {{
+                        // Streamlit standalone modunda sayfayı yenile
+                        window.location.reload();
+                    }}
+                }}, refreshInterval);
+            }}
+            
+            // Sayfa yüklendiğinde başlat
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', startAutoRefresh);
+            }} else {{
+                startAutoRefresh();
+            }}
+            
+            // Sayfa kapatılırken timer'ı temizle
+            window.addEventListener('beforeunload', function() {{
+                if (window.autoRefreshTimer) {{
+                    clearInterval(window.autoRefreshTimer);
+                }}
+            }});
+        }})();
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
