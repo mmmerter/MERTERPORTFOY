@@ -3364,26 +3364,26 @@ elif selected == "İzleme":
                        onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0, 0, 0, 0.3)';">
                         <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr; gap: 16px; align-items: center;">
                             <div>
-                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Kod</div>
+                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">🎯 Varlık</div>
                                 <div style="font-size: 22px; font-weight: 900; color: #ffffff; display: flex; align-items: center; gap: 8px;">
                                     <span>{emoji}</span>
                                     <span>{row['Kod']}</span>
                                 </div>
                             </div>
                             <div>
-                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Pazar</div>
+                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">🌍 Piyasa</div>
                                 <div style="font-size: 15px; font-weight: 700; color: #ffffff;">{row['Pazar']}</div>
                             </div>
                             <div>
-                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Başlangıç</div>
+                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">💰 Başlangıç</div>
                                 <div style="font-size: 15px; font-weight: 700; color: #b0b3c0;">{row['Maliyet']:,.2f}</div>
                             </div>
                             <div>
-                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Güncel Fiyat</div>
+                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">💵 Anlık Değer</div>
                                 <div style="font-size: 16px; font-weight: 900; color: #ffffff;">{row['Fiyat']:,.2f}</div>
                             </div>
                             <div>
-                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">Değişim</div>
+                                <div style="font-size: 11px; color: #9da1b3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;">📊 Performans</div>
                                 <div style="font-size: 20px; font-weight: 900; color: {pct_color}; text-shadow: 0 0 12px {pct_color}80;">
                                     {'+' if pct > 0 else ''}{pct:.2f}%
                                 </div>
@@ -3415,36 +3415,51 @@ elif selected == "Satışlar":
     
     sales_df = get_sales_history()
     if not sales_df.empty:
+        # Kolon isimlerini modernize et
+        sales_display = sales_df.copy()
+        sales_display = sales_display.rename(columns={
+            "Tarih": "📅 İşlem Tarihi",
+            "Kod": "🎯 Varlık",
+            "Pazar": "🌍 Piyasa",
+            "Satılan Adet": "📦 Adet",
+            "Satış Fiyatı": "💰 Satış Fiyatı",
+            "Maliyet": "💵 Alış Fiyatı",
+            "Kar/Zarar": "📊 Kâr/Zarar"
+        })
+        
         # Toplam özet metrikler ekle
-        if "Kar/Zarar" in sales_df.columns:
+        if "📊 Kâr/Zarar" in sales_display.columns:
             total_profit = sales_df["Kar/Zarar"].sum()
             total_sales_value = sales_df.get("Satış Tutarı", sales_df.get("Toplam Satış", pd.Series([0]))).sum()
+            # Eğer total_sales_value 0 ise, Satış Fiyatı * Satılan Adet'i kullan
+            if total_sales_value == 0 and "Satış Fiyatı" in sales_df.columns and "Satılan Adet" in sales_df.columns:
+                total_sales_value = (sales_df["Satış Fiyatı"] * sales_df["Satılan Adet"]).sum()
             avg_profit_pct = sales_df["Kar/Zarar"].mean() if len(sales_df) > 0 else 0
             
             col1, col2, col3 = st.columns(3)
             col1.metric(
-                "Toplam Kâr/Zarar", 
+                "💎 Toplam Kâr/Zarar", 
                 f"{sym}{total_profit:,.0f}",
                 delta=f"{(total_profit / total_sales_value * 100) if total_sales_value > 0 else 0:.2f}%"
             )
             col2.metric(
-                "Toplam Satış Tutarı", 
+                "💰 Toplam Satış Hasılatı", 
                 f"{sym}{total_sales_value:,.0f}",
-                delta=f"{len(sales_df)} işlem"
+                delta=f"{len(sales_df)} başarılı işlem"
             )
             col3.metric(
-                "Ortalama K/Z", 
+                "📈 Ortalama Getiri", 
                 f"{sym}{avg_profit_pct:,.0f}",
-                delta="İşlem başına"
+                delta="İşlem başına ortalama"
             )
             
             st.divider()
         
         st.dataframe(
-            styled_dataframe(sales_df),
+            styled_dataframe(sales_display),
             use_container_width=True,
             hide_index=True,
-            height=min(600, len(sales_df) * 50 + 100)
+            height=min(600, len(sales_display) * 50 + 100)
         )
     else:
         st.info("Henüz satış kaydı bulunmuyor. İlk satışınızı yapmak için 'Ekle/Çıkar' sekmesine gidin.")

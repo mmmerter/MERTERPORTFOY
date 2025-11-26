@@ -262,7 +262,7 @@ def render_pie_bar_charts(
                     font-weight: 800;
                     color: #ffffff;
                     letter-spacing: -0.3px;
-                ">Detaylı Dağılım Tablosu</span>
+                ">Detaylı Dağılım Analizi</span>
             </div>
         </div>
         """,
@@ -270,8 +270,14 @@ def render_pie_bar_charts(
     )
     
     disp = grouped[[label_col, "Değer", "Pay (%)"]].copy()
-    disp.rename(columns={label_col: group_col}, inplace=True)
-    disp["Pay (%)"] = disp["Pay (%)"].round(2)
+    # Kolon isimlerini modernize et
+    column_renames = {
+        label_col: f"🎯 {group_col}",
+        "Değer": "💰 Toplam Değer",
+        "Pay (%)": "📊 Portföy Payı (%)"
+    }
+    disp.rename(columns=column_renames, inplace=True)
+    disp[f"📊 Portföy Payı (%)"] = disp[f"📊 Portföy Payı (%)"].round(2)
     st.dataframe(styled_dataframe(disp), use_container_width=True, hide_index=True, height=min(400, len(disp) * 50 + 100))
 
 
@@ -396,6 +402,29 @@ def render_pazar_tab(
             disp["Değer"] = disp["Tutar"] / denom * 100
         else:
             disp["Değer"] = 0.0
+    
+    # Kolon isimlerini modernize et
+    modern_column_names = {
+        "Kod": "🎯 Varlık",
+        "Pazar": "🌍 Piyasa",
+        "Tip": "📌 Tür",
+        "Adet": "📦 Miktar",
+        "Maliyet": "💵 Alış Fiyatı",
+        "Fiyat": "💰 Güncel Fiyat",
+        "PB": "💱 Para Birimi",
+        "Yatırılan": "💸 Yatırılan Sermaye",
+        "Değer": "💎 Toplam Değer",
+        "Top. Kâr/Zarar": "📈 Toplam K/Z",
+        "Top. %": "📊 Getiri %",
+        "Gün. Kâr/Zarar": "🔄 Günlük K/Z",
+        "Notlar": "📝 Notlar",
+        "Sektör": "🏭 Sektör",
+        "Günlük %": "⚡ Günlük Değişim %",
+    }
+    
+    # Sadece mevcut kolonları rename et
+    rename_dict = {k: v for k, v in modern_column_names.items() if k in disp.columns}
+    disp = disp.rename(columns=rename_dict)
 
     st.dataframe(styled_dataframe(disp), use_container_width=True, hide_index=True, height=min(600, len(disp) * 50 + 100))
 
