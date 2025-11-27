@@ -822,25 +822,41 @@ def get_timeframe_changes(history_df, subtract_df=None, subtract_before=None):
     # 30 gün (aylık)
     m_val, m_pct, m_spark = _calc_period(30)
 
-    # YTD: yılın ilk kaydından bugüne
+    # YTD: SADECE yılın ilk birkaç gününde veri varsa hesapla
+    # Aksi halde yanıltıcı YTD gösterme (örn: Kasım'dan beri performansı YTD olarak gösterme)
     year_mask = df["Tarih"].dt.year == datetime.now().year
+    y_val, y_pct, y_spark = None, None, []
+    
+    # DEBUG: Tarihsel veri durumunu logla
+    import sys
+    print(f"🔍 DEBUG - get_timeframe_changes:", file=sys.stderr)
+    print(f"   Toplam kayıt: {len(df)}", file=sys.stderr)
+    print(f"   2025 yılı kayıt var mı: {year_mask.any()}", file=sys.stderr)
+    
     if year_mask.any():
         ydf = df[year_mask]
-        start_val = float(ydf["Değer_TRY"].iloc[0])
-        diff = today_val - start_val
-        pct = (diff / start_val * 100) if start_val > 0 else 0.0
-        y_spark = list(ydf["Değer_TRY"])
-        y_val, y_pct = diff, pct
-    else:
-        # Yıl içinde veri yoksa, tüm veriyi kullan
-        if not df.empty:
-            start_val = float(df["Değer_TRY"].iloc[0])
+        first_date_of_year = ydf["Tarih"].min()
+        
+        print(f"   İlk 2025 kaydı: {first_date_of_year.strftime('%Y-%m-%d')}", file=sys.stderr)
+        print(f"   Ay: {first_date_of_year.month}, Gün: {first_date_of_year.day}", file=sys.stderr)
+        
+        # ÖNEMLI: İlk kayıt yılın ilk 10 gününde mi? 
+        # Değilse, YTD hesaplamayı yapma (yanıltıcı olur)
+        if first_date_of_year.month == 1 and first_date_of_year.day <= 10:
+            # İlk kayıt Ocak ayının ilk 10 günündeyse, YTD hesaplama yapılabilir
+            start_val = float(ydf["Değer_TRY"].iloc[0])
             diff = today_val - start_val
             pct = (diff / start_val * 100) if start_val > 0 else 0.0
-            y_spark = list(df["Değer_TRY"])
+            y_spark = list(ydf["Değer_TRY"])
             y_val, y_pct = diff, pct
+            print(f"   ✅ YTD HESAPLANDI: {y_val:,.0f} TL ({y_pct:+.2f}%)", file=sys.stderr)
         else:
-            y_val, y_pct, y_spark = 0.0, 0.0, []
+            # İlk kayıt Ocak ayının ilk 10 gününden sonraysa, YTD hesaplama YAPMA
+            # Çünkü bu, gerçek YTD performansı değil, sadece kayıt başlangıcından beri
+            y_val, y_pct, y_spark = None, None, []
+            print(f"   ❌ YTD HESAPLANMADI (İlk kayıt Ocak'ta değil: {first_date_of_year.strftime('%B %d')})", file=sys.stderr)
+    else:
+        print(f"   ❌ 2025 yılı için hiç kayıt yok", file=sys.stderr)
 
     # Veri günü sayısı ve tarih aralığı
     oldest_date = df["Tarih"].min()
