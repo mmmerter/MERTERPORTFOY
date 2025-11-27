@@ -2197,7 +2197,8 @@ def render_kral_infobar(df, sym, gorunum_pb=None, usd_try_rate=None, timeframe=N
                 else:
                     ytd_txt = f"{show_sym}{y_val:,.0f} ({y_pct:+.2f}%)"
             else:
-                ytd_txt = "⚠️ Yetersiz Veri"
+                # YTD verisi yok - muhtemelen Ocak ayı başında veri yok
+                ytd_txt = "📊 Veri Yok"
                 y_pct = 0
         except Exception:
             # Herhangi bir sorun olursa placeholder'da kalsın
@@ -2211,9 +2212,38 @@ def render_kral_infobar(df, sym, gorunum_pb=None, usd_try_rate=None, timeframe=N
         data_days = timeframe.get("data_days", 0)
         oldest_date = timeframe.get("oldest_date", "")
         newest_date = timeframe.get("newest_date", "")
+        ytd_data_check = timeframe.get("ytd", None)
+        
+        # YTD verisi yoksa uyarı göster
+        if ytd_data_check is None and data_days > 0:
+            # Tarihleri parse et
+            try:
+                oldest_dt = pd.to_datetime(oldest_date)
+                # Ocak ayında veri yoksa uyarı göster
+                if oldest_dt.month > 1 or oldest_dt.day > 10:
+                    data_info_html += f"""
+                    <div style="
+                        background: linear-gradient(135deg, rgba(33, 150, 243, 0.15) 0%, rgba(66, 165, 245, 0.1) 100%);
+                        border-left: 3px solid #2196f3;
+                        border-radius: 8px;
+                        padding: 12px 16px;
+                        margin-bottom: 16px;
+                        color: #90caf9;
+                        font-size: 13px;
+                        font-weight: 600;
+                    ">
+                        ℹ️ <b>YTD (Year-to-Date) Hesaplanamıyor:</b> İlk veri kaydı <b>{oldest_dt.strftime('%d %B %Y')}</b> tarihinde başladı. 
+                        Doğru YTD hesaplaması için <b>1 Ocak tarihinden</b> itibaren veri gerekiyor. 
+                        <br><br>
+                        💡 <b>Çözüm:</b> Ocak ayı başındaki portföy değerinizi manuel olarak ekleyebilir, 
+                        veya sadece mevcut veri aralığındaki performansı izlemeye devam edebilirsiniz.
+                    </div>
+                    """
+            except Exception:
+                pass
         
         if data_days < 30:
-            data_info_html = f"""
+            data_info_html += f"""
             <div style="
                 background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 152, 0, 0.1) 100%);
                 border-left: 3px solid #ffc107;
