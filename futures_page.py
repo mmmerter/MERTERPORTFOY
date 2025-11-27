@@ -142,50 +142,98 @@ def show_futures_dashboard():
     
     st.title("📊 Binance Futures Dashboard")
     
-    # API ayarları
-    with st.sidebar:
-        st.header("⚙️ API Ayarları")
+    # Secrets'tan yükle (varsa)
+    try:
+        default_api_key = st.secrets["binance_futures"]["api_key"]
+        default_api_secret = st.secrets["binance_futures"]["api_secret"]
+        default_testnet = st.secrets["binance_futures"].get("testnet", False)
+        secrets_loaded = True
+    except:
+        default_api_key = st.session_state.get('futures_api_key', '')
+        default_api_secret = st.session_state.get('futures_api_secret', '')
+        default_testnet = st.session_state.get('futures_testnet', False)
+        secrets_loaded = False
+    
+    # Ana ekranda API giriş formu (eğer yoksa veya açıkça istenirse)
+    show_api_form = st.session_state.get('show_api_form', False)
+    
+    if not default_api_key or not default_api_secret or show_api_form:
+        st.markdown("---")
+        st.markdown("### 🔑 Binance API Bilgilerinizi Girin")
         
-        # Secrets'tan yükle (varsa)
-        try:
-            default_api_key = st.secrets["binance_futures"]["api_key"]
-            default_api_secret = st.secrets["binance_futures"]["api_secret"]
-            default_testnet = st.secrets["binance_futures"].get("testnet", False)
-            st.success("✅ API bilgileri secrets'tan yüklendi")
-        except:
-            default_api_key = st.session_state.get('futures_api_key', '')
-            default_api_secret = st.session_state.get('futures_api_secret', '')
-            default_testnet = st.session_state.get('futures_testnet', False)
+        with st.container():
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.info("""
+                **API Key nasıl alınır?**
+                1. [Binance](https://www.binance.com) → Profil → API Management → Create API
+                2. **Futures** iznini aktif edin
+                3. ⚠️ **ÖNEMLİ**: Sadece "Okuma" izni verin, "Withdraw" iznini vermeyin!
+                """)
+            
+            with col2:
+                st.metric("Durum", "❌ Bağlı Değil" if not default_api_key else "✅ Hazır")
         
-        # API credentials
-        api_key = st.text_input(
-            "API Key", 
-            value=default_api_key,
-            type='password',
-            help="Binance Futures API anahtarınız"
-        )
-        api_secret = st.text_input(
-            "API Secret",
-            value=default_api_secret,
-            type='password',
-            help="Binance Futures API secret"
-        )
+        with st.form("api_form", clear_on_submit=False):
+            api_key_input = st.text_input(
+                "🔐 API Key", 
+                value=default_api_key,
+                placeholder="Binance API Key'inizi buraya yapıştırın",
+                help="Binance Futures API anahtarınız"
+            )
+            
+            api_secret_input = st.text_input(
+                "🔑 API Secret",
+                value=default_api_secret,
+                type='password',
+                placeholder="Binance API Secret'ınızı buraya yapıştırın",
+                help="Binance Futures API secret"
+            )
+            
+            col1, col2, col3 = st.columns([2, 2, 1])
+            
+            with col1:
+                submitted = st.form_submit_button("✅ Kaydet ve Bağlan", use_container_width=True, type="primary")
+            
+            with col2:
+                if st.form_submit_button("❌ İptal", use_container_width=True):
+                    st.session_state['show_api_form'] = False
+                    st.rerun()
+            
+            if submitted:
+                if api_key_input and api_secret_input:
+                    st.session_state['futures_api_key'] = api_key_input
+                    st.session_state['futures_api_secret'] = api_secret_input
+                    st.session_state['futures_testnet'] = False
+                    st.session_state['show_api_form'] = False
+                    st.success("✅ API bilgileri kaydedildi! Bağlanılıyor...")
+                    st.rerun()
+                else:
+                    st.error("⚠️ Lütfen her iki alanı da doldurun!")
         
-        testnet = st.checkbox(
-            "Testnet Kullan",
-            value=default_testnet,
-            help="Test ağında çalıştır"
-        )
+        st.markdown("---")
         
-        # Kaydet
-        if st.button("💾 Kaydet", use_container_width=True):
-            st.session_state['futures_api_key'] = api_key
-            st.session_state['futures_api_secret'] = api_secret
-            st.session_state['futures_testnet'] = testnet
-            st.success("✅ Ayarlar kaydedildi!")
+        # Eğer hiç API yoksa, burada dur
+        if not default_api_key or not default_api_secret:
+            st.stop()
+    
+    # Sağ üstte API ayarları butonu
+    col1, col2, col3 = st.columns([6, 1, 1])
+    with col2:
+        if secrets_loaded:
+            st.success("✅ API Bağlı")
+        else:
+            st.info("📝 Manuel API")
+    
+    with col3:
+        if st.button("⚙️ API Ayarla", use_container_width=True):
+            st.session_state['show_api_form'] = True
             st.rerun()
-        
-        st.divider()
+    
+    # Sidebar ayarları (artık sadece ek ayarlar için)
+    with st.sidebar:
+        st.header("⚙️ Ayarlar")
         
         # Yenileme
         auto_refresh = st.checkbox(
@@ -210,19 +258,12 @@ def show_futures_dashboard():
         st.session_state['save_to_sheets'] = save_to_sheets
     
     # API key kontrolü
+    api_key = default_api_key
+    api_secret = default_api_secret
+    testnet = default_testnet
+    
     if not api_key or not api_secret:
-        st.warning("⚠️ Lütfen API bilgilerinizi sol menüden girin.")
-        st.info("""
-        ### 🔑 API Key Nasıl Alınır?
-        
-        1. [Binance](https://www.binance.com) hesabınıza giriş yapın
-        2. Profil > API Management > Create API
-        3. **Futures** iznini aktif edin
-        4. IP whitelist ekleyin (güvenlik için)
-        5. API Key ve Secret'ı buraya yapıştırın
-        
-        ⚠️ **ÖNEMLİ**: Sadece "Okuma" iznini verin, "Withdraw" iznini vermeyin!
-        """)
+        st.warning("⚠️ API bilgileri eksik!")
         return
     
     # API bağlantısı
