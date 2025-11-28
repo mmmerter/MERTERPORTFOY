@@ -1241,3 +1241,185 @@ def update_daily_base_prices(current_prices_df):
     
     except Exception:
         pass
+
+
+def check_and_fix_sheets_structure():
+    """
+    Google Sheets yapısını kontrol eder ve eksik sheet'leri/kolonları düzenler.
+    Streamlit uygulaması içinden çağrılabilir.
+    """
+    results = []
+    all_ok = True
+    
+    try:
+        client = _get_gspread_client()
+        if client is None:
+            return {
+                "success": False,
+                "message": "Google Sheets'e bağlanılamadı. İnternet bağlantısını veya servis hesabı ayarlarını kontrol edin.",
+                "results": []
+            }
+        
+        spreadsheet = client.open(SHEET_NAME)
+        results.append(f"✓ Spreadsheet '{SHEET_NAME}' bulundu")
+        
+        # 1. Ana portföy sheet'leri kontrol et
+        for profile_name, sheet_name in PROFILE_SHEETS.items():
+            if sheet_name == SHEET_NAME:
+                # Ana sheet için sheet1 kullan
+                try:
+                    sheet = spreadsheet.sheet1
+                    headers = sheet.row_values(1)
+                    expected_headers = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
+                    
+                    if not headers or headers != expected_headers:
+                        if headers:
+                            sheet.delete_rows(1)
+                        sheet.insert_row(expected_headers, 1)
+                        results.append(f"✓ '{profile_name}' (sheet1) - Header'lar düzeltildi")
+                        all_ok = False
+                    else:
+                        results.append(f"✓ '{profile_name}' (sheet1) - OK")
+                except Exception as e:
+                    results.append(f"✗ '{profile_name}' (sheet1) - Hata: {e}")
+                    all_ok = False
+            else:
+                # Diğer profil sheet'leri
+                try:
+                    sheet = spreadsheet.worksheet(sheet_name)
+                    headers = sheet.row_values(1)
+                    expected_headers = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
+                    
+                    if not headers or headers != expected_headers:
+                        if headers:
+                            sheet.delete_rows(1)
+                        sheet.insert_row(expected_headers, 1)
+                        results.append(f"✓ '{profile_name}' ({sheet_name}) - Header'lar düzeltildi")
+                        all_ok = False
+                    else:
+                        results.append(f"✓ '{profile_name}' ({sheet_name}) - OK")
+                except Exception:
+                    # Sheet yoksa oluştur
+                    try:
+                        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=10)
+                        sheet.append_row(["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
+                        results.append(f"✓ '{profile_name}' ({sheet_name}) - Sheet oluşturuldu")
+                        all_ok = False
+                    except Exception as e:
+                        results.append(f"✗ '{profile_name}' ({sheet_name}) - Sheet oluşturulamadı: {e}")
+                        all_ok = False
+        
+        # 2. Satışlar sheet'i kontrol et
+        try:
+            sheet = spreadsheet.worksheet("Satislar")
+            headers = sheet.row_values(1)
+            expected_headers = ["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"]
+            
+            if not headers or headers != expected_headers:
+                if headers:
+                    sheet.delete_rows(1)
+                sheet.insert_row(expected_headers, 1)
+                results.append(f"✓ 'Satislar' - Header'lar düzeltildi")
+                all_ok = False
+            else:
+                results.append(f"✓ 'Satislar' - OK")
+        except Exception:
+            try:
+                sheet = spreadsheet.add_worksheet(title="Satislar", rows=1000, cols=10)
+                sheet.append_row(["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
+                results.append(f"✓ 'Satislar' - Sheet oluşturuldu")
+                all_ok = False
+            except Exception as e:
+                results.append(f"✗ 'Satislar' - Sheet oluşturulamadı: {e}")
+                all_ok = False
+        
+        # 3. Portfolio history sheet'i kontrol et
+        try:
+            sheet = spreadsheet.worksheet("portfolio_history")
+            headers = sheet.row_values(1)
+            expected_headers = ["Tarih", "Değer_TRY", "Değer_USD"]
+            
+            if not headers or headers != expected_headers:
+                if headers:
+                    sheet.delete_rows(1)
+                sheet.insert_row(expected_headers, 1)
+                results.append(f"✓ 'portfolio_history' - Header'lar düzeltildi")
+                all_ok = False
+            else:
+                results.append(f"✓ 'portfolio_history' - OK")
+        except Exception:
+            try:
+                sheet = spreadsheet.add_worksheet(title="portfolio_history", rows=1000, cols=10)
+                sheet.append_row(["Tarih", "Değer_TRY", "Değer_USD"])
+                results.append(f"✓ 'portfolio_history' - Sheet oluşturuldu")
+                all_ok = False
+            except Exception as e:
+                results.append(f"✗ 'portfolio_history' - Sheet oluşturulamadı: {e}")
+                all_ok = False
+        
+        # 4. Pazar bazlı history sheet'leri kontrol et
+        market_sheets = ["history_bist", "history_abd", "history_fon", "history_emtia", "history_nakit"]
+        expected_headers = ["Tarih", "Değer_TRY", "Değer_USD"]
+        
+        for sheet_name in market_sheets:
+            try:
+                sheet = spreadsheet.worksheet(sheet_name)
+                headers = sheet.row_values(1)
+                
+                if not headers or headers != expected_headers:
+                    if headers:
+                        sheet.delete_rows(1)
+                    sheet.insert_row(expected_headers, 1)
+                    results.append(f"✓ '{sheet_name}' - Header'lar düzeltildi")
+                    all_ok = False
+                else:
+                    results.append(f"✓ '{sheet_name}' - OK")
+            except Exception:
+                try:
+                    sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=10)
+                    sheet.append_row(expected_headers)
+                    results.append(f"✓ '{sheet_name}' - Sheet oluşturuldu")
+                    all_ok = False
+                except Exception as e:
+                    results.append(f"✗ '{sheet_name}' - Sheet oluşturulamadı: {e}")
+                    all_ok = False
+        
+        # 5. Günlük baz fiyatlar sheet'i kontrol et
+        try:
+            sheet = spreadsheet.worksheet(DAILY_BASE_SHEET_NAME)
+            headers = sheet.row_values(1)
+            expected_headers = ["Tarih", "Saat", "Kod", "Fiyat", "PB"]
+            
+            if not headers or headers != expected_headers:
+                if headers:
+                    sheet.delete_rows(1)
+                sheet.insert_row(expected_headers, 1)
+                results.append(f"✓ '{DAILY_BASE_SHEET_NAME}' - Header'lar düzeltildi")
+                all_ok = False
+            else:
+                results.append(f"✓ '{DAILY_BASE_SHEET_NAME}' - OK")
+        except Exception:
+            try:
+                sheet = spreadsheet.add_worksheet(title=DAILY_BASE_SHEET_NAME, rows=1000, cols=10)
+                sheet.append_row(["Tarih", "Saat", "Kod", "Fiyat", "PB"])
+                results.append(f"✓ '{DAILY_BASE_SHEET_NAME}' - Sheet oluşturuldu")
+                all_ok = False
+            except Exception as e:
+                results.append(f"✗ '{DAILY_BASE_SHEET_NAME}' - Sheet oluşturulamadı: {e}")
+                all_ok = False
+        
+        # Cache'i temizle
+        get_data_from_sheet.clear()
+        
+        return {
+            "success": True,
+            "all_ok": all_ok,
+            "message": "Tüm sheet'ler kontrol edildi ve düzenlendi." if not all_ok else "Tüm sheet'ler ve kolonlar doğru!",
+            "results": results
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Hata oluştu: {str(e)}",
+            "results": results
+        }
