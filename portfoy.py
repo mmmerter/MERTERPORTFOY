@@ -41,8 +41,13 @@ from data_loader import (
     write_history_nakit,
     get_daily_base_prices,
     update_daily_base_prices,
-    check_and_fix_sheets_structure,
 )
+
+# check_and_fix_sheets_structure fonksiyonu eski versiyonlarda olmayabilir
+try:
+    from data_loader import check_and_fix_sheets_structure
+except ImportError:
+    check_and_fix_sheets_structure = None
 
 # Fon getirilerinin yeniden dahil edilme tarihi (varsayılan: yarın)
 def _init_fon_reset_date():
@@ -1452,22 +1457,26 @@ if not st.session_state["sheets_checked"]:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("🔧 Google Sheets Yapısını Kontrol Et ve Düzelt", use_container_width=True, type="primary"):
-            with st.spinner("Sheet yapısı kontrol ediliyor..."):
-                result = check_and_fix_sheets_structure()
-                if result["success"]:
-                    st.success(result["message"])
-                    if result["results"]:
-                        with st.expander("Detaylı Sonuçlar", expanded=True):
-                            for res in result["results"]:
-                                st.text(res)
-                    st.session_state["sheets_checked"] = True
-                    st.rerun()
-                else:
-                    st.error(result["message"])
-                    if result["results"]:
-                        with st.expander("Detaylı Sonuçlar"):
-                            for res in result["results"]:
-                                st.text(res)
+            if check_and_fix_sheets_structure is None:
+                st.error("check_and_fix_sheets_structure fonksiyonu mevcut değil. Lütfen data_loader.py dosyasını güncelleyin.")
+                st.session_state["sheets_checked"] = True
+            else:
+                with st.spinner("Sheet yapısı kontrol ediliyor..."):
+                    result = check_and_fix_sheets_structure()
+                    if result["success"]:
+                        st.success(result["message"])
+                        if result["results"]:
+                            with st.expander("Detaylı Sonuçlar", expanded=True):
+                                for res in result["results"]:
+                                    st.text(res)
+                        st.session_state["sheets_checked"] = True
+                        st.rerun()
+                    else:
+                        st.error(result["message"])
+                        if result["results"]:
+                            with st.expander("Detaylı Sonuçlar"):
+                                for res in result["results"]:
+                                    st.text(res)
 
 # --- ANA DATA ---
 portfoy_df = get_data_from_sheet(profile=SELECTED_PROFILE)
