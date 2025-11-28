@@ -2688,6 +2688,46 @@ if selected == "Dashboard":
             update_daily_base_prices(current_prices_for_base)
         except Exception:
             daily_base_prices = None
+        
+        # ⚠️ ANORMAL GÜNLÜK K/Z UYARISI (Güvenlik Önlemi)
+        # Eğer günlük K/Z portföyün %15'inden fazla düşüş gösteriyorsa uyar
+        if daily_base_prices is not None and not daily_base_prices.empty:
+            daily_pnl_check = 0.0
+            for _, row in spot_only.iterrows():
+                kod = row["Kod"]
+                current_value = row["Değer"]
+                adet = row.get("Adet", 0)
+                base_row = daily_base_prices[daily_base_prices["Kod"] == kod]
+                if not base_row.empty and adet > 0:
+                    base_price = float(base_row.iloc[0]["Fiyat"])
+                    pb = row.get("PB", "TRY")
+                    base_pb = base_row.iloc[0].get("PB", "TRY")
+                    if GORUNUM_PB == "TRY":
+                        base_value = base_price * adet * (USD_TRY if base_pb == "USD" else 1)
+                    else:
+                        base_value = base_price * adet * (1 if base_pb == "USD" else 1/USD_TRY)
+                    daily_pnl_check += (current_value - base_value)
+            
+            # Portföy değerinin %15'inden fazla düşüş varsa uyar
+            portfolio_value = spot_only["Değer"].sum()
+            if portfolio_value > 0:
+                daily_pct_check = (daily_pnl_check / portfolio_value) * 100
+                if daily_pct_check < -15:
+                    st.warning(f"""
+                    ⚠️ **ANORMAL GÜNLÜK DEĞİŞİM TESPİT EDİLDİ**
+                    
+                    Günlük K/Z: **{sym}{daily_pnl_check:,.0f}** ({daily_pct_check:.2f}%)
+                    
+                    Bu kadar büyük bir günlük düşüş normalden fazla. Olası nedenler:
+                    - 🔄 Baz fiyatlar (00:30'da kaydedilen) hatalı olabilir
+                    - 📉 Piyasada gerçekten büyük düşüş yaşanmış olabilir
+                    - 💱 Para birimi dönüşümlerinde sorun olabilir
+                    
+                    **Önerilen İşlemler:**
+                    1. Portföy sayfasını yenileyin (F5)
+                    2. Birkaç dakika sonra tekrar kontrol edin
+                    3. Sorun devam ederse, Google Sheets'teki `daily_base_prices` sayfasını kontrol edin
+                    """, icon="⚠️")
 
         # INFO BAR (Toplam Varlık + Günlük K/Z + Haftalık/Aylık/YTD + Sparkline)
         render_kral_infobar(
