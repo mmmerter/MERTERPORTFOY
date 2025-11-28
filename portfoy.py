@@ -1461,7 +1461,7 @@ with st.container():
     with c_profile:
         st.write("")
         st.markdown("<div style='font-size: 12px; color: #9da1b3; margin-bottom: 5px;'>Profil:</div>", unsafe_allow_html=True)
-        profile_options = ["ANA PROFİL", "MERT", "BERGÜZAR", "ANNEM", "TOTAL"]
+        profile_options = ["ANA PROFİL", "BERGÜZAR", "ANNEM", "TOTAL"]
         selected_profile = st.selectbox(
             "",
             profile_options,

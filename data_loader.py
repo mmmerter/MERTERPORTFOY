@@ -25,9 +25,10 @@ SHEET_NAME = "PortfoyData"
 DAILY_BASE_SHEET_NAME = "daily_base_prices"  # Günlük baz fiyatlar için
 
 # Profil sistemi - Her profil için ayrı sheet
+# ANA PROFİL ve MERT aynı sheet'i kullanır (zaten aynı kişi)
 PROFILE_SHEETS = {
     "ANA PROFİL": "PortfoyData",  # Mevcut sheet, hiçbir şeye dokunulmayacak
-    "MERT": "PortfoyData_MERT",
+    "MERT": "PortfoyData",  # ANA PROFİL ile aynı sheet
     "BERGÜZAR": "PortfoyData_BERGÜZAR",
     "ANNEM": "PortfoyData_ANNEM",
     "TOTAL": None  # Total profil için sheet yok, hepsini birleştireceğiz
@@ -105,9 +106,11 @@ def get_data_from_sheet(profile: str = "ANA PROFİL"):
     profile: "ANA PROFİL", "MERT", "BERGÜZAR", "ANNEM", "TOTAL"
     """
     # Total profil için tüm profillerin verilerini birleştir
+    # ANA PROFİL ve MERT aynı olduğu için sadece birini al
     if profile == "TOTAL":
         all_dfs = []
-        for prof_name in ["ANA PROFİL", "MERT", "BERGÜZAR", "ANNEM"]:
+        # ANA PROFİL ve MERT aynı, sadece ANA PROFİL'i al
+        for prof_name in ["ANA PROFİL", "BERGÜZAR", "ANNEM"]:
             prof_df = get_data_from_sheet(prof_name)
             if not prof_df.empty:
                 all_dfs.append(prof_df)
@@ -158,12 +161,12 @@ def get_data_from_sheet(profile: str = "ANA PROFİL"):
         if sheet_name is None:
             return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         
-        # Sheet yoksa oluştur (ANA PROFİL hariç)
-        if profile != "ANA PROFİL":
+        # Sheet yoksa oluştur (ANA PROFİL ve MERT hariç - aynı sheet'i kullanırlar)
+        if profile not in ["ANA PROFİL", "MERT"]:
             _ensure_sheet_exists(client, sheet_name)
         
         # Ana sheet için sheet1, diğerleri için worksheet kullan
-        if profile == "ANA PROFİL":
+        if profile in ["ANA PROFİL", "MERT"]:
             sheet = client.open(SHEET_NAME).sheet1
         else:
             spreadsheet = client.open(SHEET_NAME)
@@ -214,12 +217,12 @@ def save_data_to_sheet(df, profile: str = "ANA PROFİL"):
         if sheet_name is None:
             return
         
-        # Sheet yoksa oluştur
-        if profile != "ANA PROFİL":
+        # Sheet yoksa oluştur (ANA PROFİL ve MERT hariç - aynı sheet'i kullanırlar)
+        if profile not in ["ANA PROFİL", "MERT"]:
             _ensure_sheet_exists(client, sheet_name)
         
         # Ana sheet için sheet1, diğerleri için worksheet kullan
-        if profile == "ANA PROFİL":
+        if profile in ["ANA PROFİL", "MERT"]:
             sheet = client.open(SHEET_NAME).sheet1
         else:
             spreadsheet = client.open(SHEET_NAME)
