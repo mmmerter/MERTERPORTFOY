@@ -1053,38 +1053,168 @@ st.markdown(
         text-align: right !important;
     }
     
-    /* BERGUZAR Profili için Pembe Tema - Dinamik */
+    /* BERGUZAR profili için tam pembe tema */
+    .profile-berguzar-active {
+        --berguzar-pink: #ec4899;
+        --berguzar-pink-soft: #f9a8d4;
+        --berguzar-pink-glow: rgba(236, 72, 153, 0.45);
+        --berguzar-pink-dark: #200114;
+    }
+    .profile-berguzar-active,
+    .profile-berguzar-active [data-testid="stAppViewContainer"],
+    .profile-berguzar-active [data-testid="stAppBody"] {
+        background: radial-gradient(circle at 15% 15%, rgba(249, 168, 212, 0.1), transparent 45%),
+                    radial-gradient(circle at 80% 0%, rgba(236, 72, 153, 0.18), transparent 55%),
+                    #12010f !important;
+    }
+    .profile-berguzar-active .ticker-container {
+        background: linear-gradient(120deg, rgba(236, 72, 153, 0.35) 0%, rgba(32, 1, 28, 0.95) 100%) !important;
+        border-bottom: 2px solid rgba(236, 72, 153, 0.55) !important;
+        box-shadow: 0 15px 40px rgba(236, 72, 153, 0.2) !important;
+    }
     .profile-berguzar-active .portfolio-ticker {
-        border-bottom: 2px solid #ec4899 !important;
+        border-bottom: 2px solid rgba(236, 72, 153, 0.85) !important;
     }
     .profile-berguzar-active .ticker-label {
-        color: #ec4899 !important;
+        color: #ffe3f5 !important;
+        background: linear-gradient(135deg, rgba(236, 72, 153, 0.4), rgba(88, 28, 70, 0.9)) !important;
+        border-right: 1px solid rgba(236, 72, 153, 0.45) !important;
+    }
+    .profile-berguzar-active .ticker-text {
+        color: #ffd7ed !important;
+        text-shadow: 0 0 12px rgba(236, 72, 153, 0.25);
+    }
+    .profile-berguzar-active .nav-link {
+        color: rgba(249, 168, 212, 0.85) !important;
+        background: rgba(236, 72, 153, 0.08) !important;
+        border-radius: 12px !important;
+        border: 1px solid transparent !important;
+        transition: all 0.25s ease !important;
+    }
+    .profile-berguzar-active .nav-link:hover {
+        background: rgba(236, 72, 153, 0.18) !important;
+        color: #ffeefa !important;
+        box-shadow: 0 10px 24px rgba(236, 72, 153, 0.2) !important;
+    }
+    .profile-berguzar-active .nav-link.active {
+        background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%) !important;
+        color: #ffffff !important;
+        box-shadow: 0 12px 28px rgba(236, 72, 153, 0.35) !important;
+        border-color: transparent !important;
     }
     .profile-berguzar-active .kral-header {
-        border: 1px solid rgba(236, 72, 153, 0.3) !important;
-        box-shadow: 0 10px 25px rgba(236, 72, 153, 0.2) !important;
+        background: linear-gradient(140deg, rgba(236, 72, 153, 0.35), rgba(19, 1, 16, 0.94)) !important;
+        border: 1px solid rgba(236, 72, 153, 0.4) !important;
+        box-shadow: 0 25px 60px rgba(236, 72, 153, 0.25) !important;
+    }
+    .profile-berguzar-active .kral-header-title {
+        color: #ffe7f6 !important;
+        text-shadow: 0 0 18px rgba(236, 72, 153, 0.25);
+    }
+    .profile-berguzar-active .kral-header-sub {
+        color: rgba(249, 168, 212, 0.85) !important;
+    }
+    .profile-berguzar-active .kral-infobox {
+        background: linear-gradient(145deg, rgba(236, 72, 153, 0.2), rgba(10, 1, 10, 0.9)) !important;
+        border: 1px solid rgba(236, 72, 153, 0.35) !important;
+        box-shadow: 0 15px 35px rgba(236, 72, 153, 0.22) !important;
+    }
+    .profile-berguzar-active .kral-infobox-label,
+    .profile-berguzar-active .kral-infobox-sub {
+        color: rgba(249, 168, 212, 0.9) !important;
+    }
+    .profile-berguzar-active .kral-infobox-value {
+        color: #ffeefa !important;
+        text-shadow: 0 0 20px rgba(236, 72, 153, 0.35);
+    }
+    .profile-berguzar-active div[data-testid="stMetric"] {
+        background: linear-gradient(135deg, rgba(236, 72, 153, 0.22), rgba(12, 0, 12, 0.9)) !important;
+        border: 1px solid rgba(236, 72, 153, 0.35) !important;
+        box-shadow: 0 18px 40px rgba(236, 72, 153, 0.25) !important;
+    }
+    .profile-berguzar-active div[data-testid="stMetricValue"] {
+        color: #ffeefa !important;
+    }
+    .profile-berguzar-active div[data-testid="stMetricLabel"] {
+        color: rgba(249, 168, 212, 0.85) !important;
     }
     .profile-berguzar-active [data-testid="stDataFrame"] thead th {
-        border-bottom: 2px solid #ec4899 !important;
+        border-bottom: 2px solid var(--berguzar-pink) !important;
+        background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(20, 2, 19, 0.95)) !important;
+        color: #ffeefa !important;
+    }
+    .profile-berguzar-active [data-testid="stDataFrame"] tbody tr:hover {
+        background: rgba(236, 72, 153, 0.12) !important;
+        box-shadow: 0 4px 12px rgba(236, 72, 153, 0.18) !important;
     }
     .profile-berguzar-active .news-card {
-        border-left-color: #ec4899 !important;
+        background: linear-gradient(145deg, rgba(236, 72, 153, 0.22), rgba(17, 0, 14, 0.94)) !important;
+        border-left-color: var(--berguzar-pink) !important;
+        box-shadow: 0 18px 40px rgba(236, 72, 153, 0.22) !important;
     }
     .profile-berguzar-active .news-card::before {
         background: linear-gradient(180deg, #ec4899 0%, #f472b6 100%) !important;
     }
+    .profile-berguzar-active .news-title {
+        color: #ffeefa !important;
+    }
+    .profile-berguzar-active .news-meta {
+        color: rgba(249, 168, 212, 0.85) !important;
+    }
+    .profile-berguzar-active .news-source-badge {
+        background: rgba(236, 72, 153, 0.25) !important;
+        color: #ffe4f5 !important;
+        border-color: rgba(236, 72, 153, 0.35) !important;
+    }
     .profile-berguzar-active .news-asset-badge {
         background: rgba(236, 72, 153, 0.2) !important;
-        color: #f472b6 !important;
+        color: #fef6fb !important;
     }
-    .profile-berguzar-active div[data-testid="stMetric"] {
-        border-color: rgba(236, 72, 153, 0.3) !important;
+    .profile-berguzar-active .news-filter-chip {
+        background: rgba(236, 72, 153, 0.18) !important;
+        border-color: rgba(236, 72, 153, 0.35) !important;
+        color: #ffe4f5 !important;
     }
     .profile-berguzar-active .news-filter-chip.active {
         background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%) !important;
+        color: #ffffff !important;
+        border-color: transparent !important;
+        box-shadow: 0 10px 25px rgba(236, 72, 153, 0.35) !important;
     }
     .profile-berguzar-active .news-filter-chip:hover {
-        background: rgba(236, 72, 153, 0.25) !important;
+        background: rgba(236, 72, 153, 0.3) !important;
+        transform: translateY(-2px);
+    }
+    .profile-berguzar-active .daily-movers-card {
+        background: linear-gradient(150deg, rgba(236, 72, 153, 0.25), rgba(14, 0, 14, 0.92)) !important;
+        border: 1px solid rgba(236, 72, 153, 0.35) !important;
+        box-shadow: 0 25px 50px rgba(236, 72, 153, 0.25) !important;
+    }
+    .profile-berguzar-active .daily-movers-card::before {
+        background: linear-gradient(90deg, transparent, rgba(236, 72, 153, 0.8), transparent) !important;
+    }
+    .profile-berguzar-active .daily-movers-card.positive-card,
+    .profile-berguzar-active .daily-movers-card.negative-card {
+        border-top: 4px solid rgba(236, 72, 153, 0.8) !important;
+        color: #ffeefa !important;
+    }
+    .profile-berguzar-active .daily-movers-chip {
+        background: rgba(236, 72, 153, 0.18) !important;
+        border-color: rgba(236, 72, 153, 0.35) !important;
+        color: #ffeefa !important;
+    }
+    .profile-berguzar-active .daily-mover-row {
+        background: linear-gradient(130deg, rgba(236, 72, 153, 0.18), rgba(10, 0, 10, 0.7)) !important;
+        border: 1px solid rgba(236, 72, 153, 0.35) !important;
+    }
+    .profile-berguzar-active .daily-mover-change {
+        color: #ffeefa !important;
+        text-shadow: 0 0 15px rgba(236, 72, 153, 0.35) !important;
+    }
+    .profile-berguzar-active .daily-mover-symbol-badge {
+        background: rgba(236, 72, 153, 0.35) !important;
+        color: #ffeefa !important;
+        box-shadow: 0 10px 20px rgba(236, 72, 153, 0.25) !important;
     }
 </style>
 """,
