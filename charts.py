@@ -604,7 +604,15 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str, start_d
             if "SI=F" not in symbol_to_rows:
                 symbol_to_rows["SI=F"] = []
             symbol_to_rows["SI=F"].append((idx, kod, pazar, adet, asset_currency, "GRAM_GUMUS", maliyet))
+        elif "22 AYAR" in kod_upper:
+            # 22 ayar gram altın - ayrı case_type
+            if "GC=F" not in yahoo_symbols:
+                yahoo_symbols.append("GC=F")
+            if "GC=F" not in symbol_to_rows:
+                symbol_to_rows["GC=F"] = []
+            symbol_to_rows["GC=F"].append((idx, kod, pazar, adet, asset_currency, "GRAM_ALTIN_22AYAR", maliyet))
         elif "GRAM ALTIN" in kod_upper:
+            # 24 ayar (saf) gram altın
             if "GC=F" not in yahoo_symbols:
                 yahoo_symbols.append("GC=F")
             if "GC=F" not in symbol_to_rows:
@@ -674,8 +682,11 @@ def get_historical_chart(df: pd.DataFrame, usd_try_rate: float, pb: str, start_d
                 idx, kod, pazar, adet, asset_currency, case_type = row_data
                 maliyet = 0.0
             
-            if case_type in ["GRAM_GUMUS", "GRAM_ALTIN"]:
-                # Gram altın/gümüş için özel dönüşüm
+            if case_type == "GRAM_ALTIN_22AYAR":
+                # 22 ayar gram altın = 22/24 = 0.9167 (91.67% saf altın)
+                prices_converted = ((prices * usd_try_rate) / 31.1035) * 0.9167
+            elif case_type in ["GRAM_GUMUS", "GRAM_ALTIN"]:
+                # Gram altın/gümüş için özel dönüşüm (24 ayar = saf altın)
                 prices_converted = (prices * usd_try_rate) / 31.1035
             else:
                 prices_converted = prices
@@ -1104,7 +1115,15 @@ def get_comparison_chart(df: pd.DataFrame, usd_try_rate: float, pb: str, compari
             if "SI=F" not in symbol_to_rows:
                 symbol_to_rows["SI=F"] = []
             symbol_to_rows["SI=F"].append((idx, kod, pazar, adet, asset_currency, "GRAM_GUMUS"))
+        elif "22 AYAR" in kod_upper:
+            # 22 ayar gram altın - ayrı case_type
+            if "GC=F" not in yahoo_symbols:
+                yahoo_symbols.append("GC=F")
+            if "GC=F" not in symbol_to_rows:
+                symbol_to_rows["GC=F"] = []
+            symbol_to_rows["GC=F"].append((idx, kod, pazar, adet, asset_currency, "GRAM_ALTIN_22AYAR"))
         elif "GRAM ALTIN" in kod_upper:
+            # 24 ayar (saf) gram altın
             if "GC=F" not in yahoo_symbols:
                 yahoo_symbols.append("GC=F")
             if "GC=F" not in symbol_to_rows:

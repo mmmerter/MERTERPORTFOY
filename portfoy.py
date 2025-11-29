@@ -1800,7 +1800,7 @@ def run_analysis(df, usd_try_rate, view_currency):
             if "SI=F" not in emtia_symbols:
                 emtia_symbols.append("SI=F")
             symbol_map[idx] = ("SI=F", "EMTIA")
-        elif "Gram Altın" in kod or "GRAM ALTIN" in kod:
+        elif "Gram Altın" in kod or "GRAM ALTIN" in kod or "22 Ayar" in kod or "22 AYAR" in kod:
             if "GC=F" not in emtia_symbols:
                 emtia_symbols.append("GC=F")
             symbol_map[idx] = ("GC=F", "EMTIA")
@@ -1936,7 +1936,15 @@ def run_analysis(df, usd_try_rate, view_currency):
                     p_data = gram_prices_5d["SI=F"]
                     curr = (p_data["curr"] * usd_try_rate) / 31.1035
                     prev = (p_data["prev"] * usd_try_rate) / 31.1035
+            elif "22 Ayar" in kod or "22 AYAR" in kod:
+                # 22 ayar altın = 22/24 = 0.9167 (91.67% saf altın)
+                if "GC=F" in gram_prices_5d:
+                    p_data = gram_prices_5d["GC=F"]
+                    # Ons fiyatını grama çevir, sonra 22 ayar oranıyla çarp
+                    curr = ((p_data["curr"] * usd_try_rate) / 31.1035) * 0.9167
+                    prev = ((p_data["prev"] * usd_try_rate) / 31.1035) * 0.9167
             elif "Gram Altın" in kod or "GRAM ALTIN" in kod:
+                # 24 ayar (saf) gram altın
                 if "GC=F" in gram_prices_5d:
                     p_data = gram_prices_5d["GC=F"]
                     curr = (p_data["curr"] * usd_try_rate) / 31.1035

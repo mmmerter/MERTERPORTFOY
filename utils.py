@@ -46,7 +46,7 @@ MARKET_DATA = {
     "ABD": ["AAPL", "TSLA"],
     "KRIPTO": ["BTC", "ETH"],
     "FON": KNOWN_FUNDS,
-    "EMTIA": ["Gram Altın", "Gram Gümüş"],
+    "EMTIA": ["Gram Altın", "22 Ayar Gram Altın", "Gram Gümüş"],
     "VADELI": ["BTC", "ETH", "SOL"],
     "NAKIT": ["TL", "USD", "EUR"],
 }
@@ -66,7 +66,7 @@ def get_yahoo_symbol(kod, pazar):
         return f"{kod}-USD" if not kod.endswith("-USD") else kod
     elif "EMTIA" in pazar:
         # Gramlar için Ons sembolü döndür, hesaplama charts.py'da yapılacak
-        if "Gram Altın" in kod or "GRAM ALTIN" in kod:
+        if "Gram Altın" in kod or "GRAM ALTIN" in kod or "22 Ayar" in kod or "22 AYAR" in kod:
             return "GC=F"
         if "Gram Gümüş" in kod or "GRAM GÜMÜŞ" in kod:
             return "SI=F"
