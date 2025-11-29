@@ -20,8 +20,8 @@ PROFILES = {
     },
     "ANNEM": {
         "name": "ANNEM",
-        "display_name": "👩 Annem",
-        "icon": "👩",
+        "display_name": "💝 Annem",
+        "icon": "💝",
         "color": "#ec4899",
         "is_aggregate": False,
         "description": "Anne portföyü"
@@ -146,7 +146,10 @@ def render_profile_selector():
     cols = st.columns([0.15, 0.85])
     
     with cols[0]:
-        st.markdown("### 👤")
+        # Profil ikonunu göster
+        current_config = get_profile_config(current_profile)
+        profile_icon = current_config.get("icon", "👤")
+        st.markdown(f"### {profile_icon}")
     
     with cols[1]:
         # Get profile display names
@@ -170,12 +173,13 @@ def render_profile_selector():
             st.rerun()
             return True
     
-    # Show current profile info
+    # Show current profile info with icon
     config = get_profile_config(current_profile)
+    profile_icon = config.get("icon", "👤")
     if config["is_aggregate"]:
         st.info(f"🔄 **{config['display_name']}**: Tüm profillerin birleşik görünümü")
     else:
-        st.caption(f"📌 Aktif profil: **{config['display_name']}**")
+        st.caption(f"📌 Aktif profil: **{profile_icon} {config['display_name'].replace(profile_icon, '').strip()}**")
     
     return False
 

@@ -23,6 +23,7 @@ from profile_manager import (
     render_profile_selector,
     is_aggregate_profile,
     get_profile_display_name,
+    get_profile_config,
 )
 
 # Use profile-aware data loader
@@ -1051,6 +1052,40 @@ st.markdown(
         font-variant-numeric: tabular-nums !important;
         text-align: right !important;
     }
+    
+    /* BERGUZAR Profili için Pembe Tema - Dinamik */
+    .profile-berguzar-active .portfolio-ticker {
+        border-bottom: 2px solid #ec4899 !important;
+    }
+    .profile-berguzar-active .ticker-label {
+        color: #ec4899 !important;
+    }
+    .profile-berguzar-active .kral-header {
+        border: 1px solid rgba(236, 72, 153, 0.3) !important;
+        box-shadow: 0 10px 25px rgba(236, 72, 153, 0.2) !important;
+    }
+    .profile-berguzar-active [data-testid="stDataFrame"] thead th {
+        border-bottom: 2px solid #ec4899 !important;
+    }
+    .profile-berguzar-active .news-card {
+        border-left-color: #ec4899 !important;
+    }
+    .profile-berguzar-active .news-card::before {
+        background: linear-gradient(180deg, #ec4899 0%, #f472b6 100%) !important;
+    }
+    .profile-berguzar-active .news-asset-badge {
+        background: rgba(236, 72, 153, 0.2) !important;
+        color: #f472b6 !important;
+    }
+    .profile-berguzar-active div[data-testid="stMetric"] {
+        border-color: rgba(236, 72, 153, 0.3) !important;
+    }
+    .profile-berguzar-active .news-filter-chip.active {
+        background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%) !important;
+    }
+    .profile-berguzar-active .news-filter-chip:hover {
+        background: rgba(236, 72, 153, 0.25) !important;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -1484,6 +1519,37 @@ st.markdown("---")
 render_profile_selector()
 current_profile = get_current_profile()
 is_total = is_aggregate_profile(current_profile)
+
+# Profil bazlı CSS class ekle (Bergüzar için pembe tema)
+if current_profile == "BERGUZAR":
+    st.markdown(
+        """
+        <div class="profile-berguzar-active">
+        <script>
+        (function() {
+            function addClass() {
+                var containers = document.querySelectorAll('[data-testid="stAppViewContainer"]');
+                containers.forEach(function(container) {
+                    container.classList.add('profile-berguzar-active');
+                });
+                var body = document.body;
+                if (body) body.classList.add('profile-berguzar-active');
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', addClass);
+            } else {
+                addClass();
+            }
+        })();
+        </script>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Profil bazlı CSS class ekle
+if current_profile == "BERGUZAR":
+    st.markdown('<body class="profile-berguzar">', unsafe_allow_html=True)
 
 # TOTAL profili için uyarı göster
 if is_total:
@@ -3797,13 +3863,16 @@ elif selected == "Ekle/Çıkar":
         # Pazar seçimi
         pazar = st.selectbox("Pazar", list(MARKET_DATA.keys()), key="ekle_pazar")
 
-        # Kod seçimi - EMTIA için özel dropdown (Gram Altın, Gram Gümüş)
+        # Kod seçimi - EMTIA için özel dropdown (Gram Altın, 22 Ayar Gram Altın, Gram Gümüş)
         if pazar == "EMTIA":
             kod_options = MARKET_DATA.get("EMTIA", [])
+            # 22 Ayar Gram Altın'ı kontrol et ve ekle
+            if "22 Ayar Gram Altın" not in kod_options:
+                kod_options = ["Gram Altın", "22 Ayar Gram Altın", "Gram Gümüş"]
             if kod_options:
                 kod = st.selectbox("Kod", kod_options, key="ekle_kod_emtia")
             else:
-                kod = st.text_input("Kod (Örn: Gram Altın, Gram Gümüş)", key="ekle_kod_emtia_manu").upper()
+                kod = st.text_input("Kod (Örn: Gram Altın, 22 Ayar Gram Altın, Gram Gümüş)", key="ekle_kod_emtia_manu").upper()
         else:
             # Diğer pazarlar için manuel giriş veya öneri
             kod_options = MARKET_DATA.get(pazar, [])
