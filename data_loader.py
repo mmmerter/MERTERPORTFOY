@@ -71,7 +71,7 @@ def _get_gspread_client():
             _client_cache = None
     return _client_cache
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=120)  # 2 dakika cache - Sheets verileri daha az sık değişir
 def get_data_from_sheet():
     try:
         client = _get_gspread_client()
@@ -114,7 +114,7 @@ def save_data_to_sheet(df):
     except Exception:
         pass
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=180)  # 3 dakika cache - Satış geçmişi daha az sık değişir
 def get_sales_history():
     try:
         client = _get_gspread_client()
