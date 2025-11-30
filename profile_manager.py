@@ -7,6 +7,9 @@ Each profile has separate data storage and calculations.
 import streamlit as st
 from typing import List, Dict, Optional
 from datetime import datetime
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import pandas as pd
 
 # Profile definitions
 PROFILES = {
@@ -66,6 +69,10 @@ def get_profile_config(profile_name: str) -> Dict:
 
 def get_all_profiles() -> List[str]:
     """Get list of all profiles in display order."""
+    try:
+        load_profiles_from_sheets()
+    except:
+        pass
     return PROFILE_ORDER
 
 
@@ -76,10 +83,15 @@ def get_individual_profiles(include_berguzar: bool = None) -> List[str]:
     Args:
         include_berguzar: If None, uses session state setting. If False, excludes BERGUZAR.
     """
+    try:
+        load_profiles_from_sheets()
+    except:
+        pass
+    
     if include_berguzar is None:
         include_berguzar = st.session_state.get("total_include_berguzar", True)
     
-    profiles = [p for p in PROFILE_ORDER if not PROFILES[p]["is_aggregate"]]
+    profiles = [p for p in PROFILE_ORDER if p in PROFILES and not PROFILES[p].get("is_aggregate", False)]
     
     if not include_berguzar and "BERGUZAR" in profiles:
         profiles.remove("BERGUZAR")
@@ -114,6 +126,12 @@ def get_current_profile() -> str:
 
 def set_current_profile(profile_name: str):
     """Set currently active profile."""
+    # Reload profiles to ensure we have latest
+    try:
+        load_profiles_from_sheets()
+    except:
+        pass
+    
     if profile_name in PROFILES:
         st.session_state["current_profile"] = profile_name
         # Clear cache when switching profiles
@@ -140,6 +158,12 @@ def render_profile_selector():
     Returns True if profile changed, False otherwise.
     """
     init_session_state()
+    # Reload profiles from sheets to get latest updates
+    try:
+        load_profiles_from_sheets()
+    except:
+        pass
+    
     current_profile = get_current_profile()
     
     # Modern profile selector with custom CSS
@@ -177,23 +201,40 @@ def render_profile_selector():
         st.markdown(f"### {profile_icon}")
     
     with cols[1]:
-        # Get profile display names
-        profile_options = [PROFILES[p]["display_name"] for p in PROFILE_ORDER]
-        current_index = PROFILE_ORDER.index(current_profile)
+        # Get profile display names - reload to get latest
+        try:
+            load_profiles_from_sheets()
+        except:
+            pass
+        
+        profile_options = [PROFILES[p]["display_name"] for p in PROFILE_ORDER if p in PROFILES]
+        
+        # Handle case where current profile might not be in list
+        try:
+            current_index = PROFILE_ORDER.index(current_profile) if current_profile in PROFILE_ORDER else 0
+        except:
+            current_index = 0
+        
+        if not profile_options:
+            profile_options = ["🎯 Mert (Ana Profil)"]
+            current_index = 0
         
         selected_display = st.selectbox(
             "Profil Seç",
             profile_options,
-            index=current_index,
+            index=min(current_index, len(profile_options) - 1),
             key="profile_selector",
             label_visibility="collapsed"
         )
         
         # Get selected profile name
-        selected_profile = PROFILE_ORDER[profile_options.index(selected_display)]
+        try:
+            selected_profile = PROFILE_ORDER[profile_options.index(selected_display)]
+        except:
+            selected_profile = current_profile
         
         # Check if profile changed
-        if selected_profile != current_profile:
+        if selected_profile != current_profile and selected_profile in PROFILES:
             set_current_profile(selected_profile)
             st.rerun()
             return True
@@ -291,3 +332,186 @@ def log_profile_action(action: str, profile_name: str, details: str = ""):
     # Keep only last 100 logs
     if len(st.session_state["profile_logs"]) > 100:
         st.session_state["profile_logs"] = st.session_state["profile_logs"][-100:]
+
+
+# ==================== DYNAMIC PROFILE MANAGEMENT ====================
+
+def _get_gspread_client():
+    """Get Google Sheets client."""
+    try:
+        creds_dict = st.secrets["gcp_service_account"]
+        scope = [
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error(f"Google Sheets bağlantı hatası: {str(e)}")
+        return None
+
+
+def _get_profiles_sheet():
+    """Get or create the profiles configuration sheet."""
+    try:
+        client = _get_gspread_client()
+        if client is None:
+            return None
+        
+        spreadsheet = client.open("PortfoyData")
+        
+        # Try to find existing profiles sheet
+        try:
+            ws = spreadsheet.worksheet("Profiller")
+            return ws
+        except:
+            # Create new profiles sheet
+            ws = spreadsheet.add_worksheet(title="Profiller", rows=100, cols=10)
+            # Add headers
+            headers = ["name", "display_name", "icon", "color", "is_aggregate", "description", "order"]
+            ws.append_row(headers)
+            
+            # Add default profiles
+            default_profiles = [
+                ["MERT", "🎯 Mert (Ana Profil)", "🎯", "#6b7fd7", "False", "Ana portföy profili", "1"],
+                ["ANNEM", "💝 Annem", "💝", "#ec4899", "False", "Anne portföyü", "2"],
+                ["BERGUZAR", "👸 Bergüzar", "👸", "#ec4899", "False", "Bergüzar portföyü - Pembe prenses teması", "3"],
+                ["İKRAMİYE", "🎁 İkramiye", "🎁", "#10b981", "False", "İkramiye portföyü", "4"],
+                ["TOTAL", "📊 TOPLAM", "📊", "#f59e0b", "True", "Tüm profillerin toplamı", "5"],
+            ]
+            for profile in default_profiles:
+                ws.append_row(profile)
+            
+            return ws
+    except Exception as e:
+        st.error(f"Profil yapılandırma hatası: {str(e)}")
+        return None
+
+
+def load_profiles_from_sheets() -> Dict[str, Dict]:
+    """Load profiles from Google Sheets."""
+    ws = _get_profiles_sheet()
+    if ws is None:
+        # Return default profiles if sheet can't be accessed
+        return PROFILES
+    
+    try:
+        data = ws.get_all_records()
+        profiles = {}
+        profile_order = []
+        
+        # Sort by order column
+        sorted_data = sorted(data, key=lambda x: int(x.get("order", 999)))
+        
+        for row in sorted_data:
+            name = row.get("name", "").strip()
+            if not name:
+                continue
+            
+            profiles[name] = {
+                "name": name,
+                "display_name": row.get("display_name", name),
+                "icon": row.get("icon", "👤"),
+                "color": row.get("color", "#6b7fd7"),
+                "is_aggregate": row.get("is_aggregate", "False").lower() == "true",
+                "description": row.get("description", ""),
+            }
+            profile_order.append(name)
+        
+        # Update global PROFILES and PROFILE_ORDER
+        PROFILES.update(profiles)
+        global PROFILE_ORDER
+        PROFILE_ORDER = profile_order if profile_order else ["MERT", "ANNEM", "BERGUZAR", "İKRAMİYE", "TOTAL"]
+        
+        return profiles
+    except Exception as e:
+        st.warning(f"Profil yükleme hatası, varsayılan profiller kullanılıyor: {str(e)}")
+        return PROFILES
+
+
+def save_profile_to_sheets(profile_data: Dict) -> bool:
+    """Save a profile to Google Sheets."""
+    ws = _get_profiles_sheet()
+    if ws is None:
+        return False
+    
+    try:
+        data = ws.get_all_records()
+        
+        # Check if profile exists
+        existing_row = None
+        for idx, row in enumerate(data, start=2):  # Start from row 2 (skip header)
+            if row.get("name", "").strip().upper() == profile_data["name"].upper():
+                existing_row = idx
+                break
+        
+        # Prepare row data
+        row_data = [
+            profile_data["name"],
+            profile_data["display_name"],
+            profile_data["icon"],
+            profile_data["color"],
+            str(profile_data.get("is_aggregate", False)),
+            profile_data.get("description", ""),
+            str(profile_data.get("order", len(data) + 1))
+        ]
+        
+        if existing_row:
+            # Update existing profile
+            ws.update(f"A{existing_row}:G{existing_row}", [row_data])
+        else:
+            # Add new profile
+            ws.append_row(row_data)
+        
+        # Reload profiles
+        load_profiles_from_sheets()
+        return True
+    except Exception as e:
+        st.error(f"Profil kaydetme hatası: {str(e)}")
+        return False
+
+
+def delete_profile_from_sheets(profile_name: str) -> bool:
+    """Delete a profile from Google Sheets."""
+    ws = _get_profiles_sheet()
+    if ws is None:
+        return False
+    
+    try:
+        data = ws.get_all_records()
+        
+        # Find and delete row
+        for idx, row in enumerate(data, start=2):  # Start from row 2 (skip header)
+            if row.get("name", "").strip().upper() == profile_name.upper():
+                ws.delete_rows(idx)
+                # Reload profiles
+                load_profiles_from_sheets()
+                return True
+        
+        return False
+    except Exception as e:
+        st.error(f"Profil silme hatası: {str(e)}")
+        return False
+
+
+def get_next_profile_order() -> int:
+    """Get the next order number for a new profile."""
+    ws = _get_profiles_sheet()
+    if ws is None:
+        return len(PROFILE_ORDER) + 1
+    
+    try:
+        data = ws.get_all_records()
+        if not data:
+            return 1
+        max_order = max([int(row.get("order", 0)) for row in data], default=0)
+        return max_order + 1
+    except:
+        return len(PROFILE_ORDER) + 1
+
+
+# Initialize profiles from sheets on module load
+try:
+    load_profiles_from_sheets()
+except:
+    pass  # Use default profiles if loading fails
