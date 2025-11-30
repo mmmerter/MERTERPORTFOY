@@ -1848,6 +1848,7 @@ selected = option_menu(
         "Satışlar",
         "Haberler",
         "Ekle/Çıkar",
+        "Profil Yönetimi",
     ],
     icons=[
         "speedometer2",
@@ -1856,6 +1857,7 @@ selected = option_menu(
         "receipt",
         "newspaper",
         "gear",
+        "person-gear",
     ],
     menu_icon="cast",
     default_index=0,
@@ -4366,6 +4368,300 @@ elif selected == "Ekle/Çıkar":
                         )
                         time.sleep(1)
                         st.rerun()
+
+
+elif selected == "Profil Yönetimi":
+    st.header("👤 Profil Yönetimi")
+    st.markdown("---")
+    
+    from profile_manager import (
+        load_profiles_from_sheets,
+        save_profile_to_sheets,
+        delete_profile_from_sheets,
+        get_next_profile_order,
+        get_all_profiles,
+        get_current_profile,
+        set_current_profile,
+        PROFILES,
+        PROFILE_ORDER,
+    )
+    
+    # Reload profiles
+    try:
+        load_profiles_from_sheets()
+    except Exception as e:
+        st.warning(f"Profil yükleme hatası: {str(e)}")
+    
+    tab_add, tab_edit, tab_delete = st.tabs(["➕ Yeni Profil Ekle", "✏️ Profil Düzenle", "🗑️ Profil Sil"])
+    
+    # ==================== YENİ PROFİL EKLE ====================
+    with tab_add:
+        st.subheader("➕ Yeni Profil Oluştur")
+        st.caption("Yeni bir portföy profili ekleyin. Her profil kendi varlıklarını tutar.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            profile_name = st.text_input(
+                "Profil Adı *",
+                placeholder="Örn: KARDEŞ, DEDE",
+                help="Büyük harflerle, boşluk olmadan (örn: KARDEŞ)"
+            ).strip().upper()
+            
+            display_name = st.text_input(
+                "Görünen Ad *",
+                placeholder="Örn: 👨‍👩‍👧 Kardeş",
+                help="Kullanıcı arayüzünde görünecek isim"
+            )
+            
+            icon = st.text_input(
+                "İkon (Emoji) *",
+                value="👤",
+                help="Bir emoji seçin (örn: 👤, 👨, 👩, 🎯)"
+            )
+        
+        with col2:
+            color = st.color_picker(
+                "Renk *",
+                value="#6b7fd7",
+                help="Profil için tema rengi"
+            )
+            
+            description = st.text_area(
+                "Açıklama",
+                placeholder="Bu profil hakkında kısa bir açıklama...",
+                help="Profil hakkında notlar"
+            )
+            
+            is_aggregate = st.checkbox(
+                "Toplam Profili (TOTAL)",
+                value=False,
+                help="Bu profil diğer profillerin toplamını gösterir"
+            )
+        
+        if st.button("✅ Profil Ekle", type="primary", use_container_width=True):
+            if not profile_name:
+                st.error("❌ Profil adı boş olamaz!")
+            elif not display_name:
+                st.error("❌ Görünen ad boş olamaz!")
+            elif profile_name in PROFILES:
+                st.error(f"❌ '{profile_name}' adında bir profil zaten mevcut!")
+            elif profile_name == "TOTAL" and not is_aggregate:
+                st.error("❌ 'TOTAL' adı sadece toplam profilleri için kullanılabilir!")
+            else:
+                try:
+                    profile_data = {
+                        "name": profile_name,
+                        "display_name": display_name,
+                        "icon": icon if icon else "👤",
+                        "color": color,
+                        "is_aggregate": is_aggregate,
+                        "description": description,
+                        "order": get_next_profile_order()
+                    }
+                    
+                    if save_profile_to_sheets(profile_data):
+                        st.success(f"✅ '{display_name}' profili başarıyla eklendi!")
+                        
+                        # Create worksheet for the profile if not aggregate
+                        if not is_aggregate:
+                            try:
+                                from data_loader_profiles import _get_profile_sheet
+                                from data_loader import _get_gspread_client, SHEET_NAME
+                                client = _get_gspread_client()
+                                if client:
+                                    spreadsheet = client.open(SHEET_NAME)
+                                    try:
+                                        # Check if worksheet exists
+                                        spreadsheet.worksheet(profile_name.lower())
+                                    except:
+                                        # Create worksheet
+                                        ws = spreadsheet.add_worksheet(
+                                            title=profile_name.lower(),
+                                            rows=1000,
+                                            cols=20
+                                        )
+                                        headers = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
+                                        ws.append_row(headers)
+                                        st.info(f"📄 '{profile_name}' için worksheet oluşturuldu.")
+                            except Exception as e:
+                                st.warning(f"⚠️ Worksheet oluşturulamadı: {str(e)}")
+                        
+                        time.sleep(1.5)
+                        st.rerun()
+                    else:
+                        st.error("❌ Profil kaydedilemedi. Google Sheets bağlantısını kontrol edin.")
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
+    
+    # ==================== PROFİL DÜZENLE ====================
+    with tab_edit:
+        st.subheader("✏️ Profil Düzenle")
+        st.caption("Mevcut profillerin bilgilerini güncelleyin.")
+        
+        # Get individual profiles (exclude TOTAL from editing)
+        editable_profiles = [p for p in PROFILE_ORDER if p in PROFILES and not PROFILES[p].get("is_aggregate", False)]
+        
+        if not editable_profiles:
+            st.info("📝 Düzenlenebilir profil bulunmuyor.")
+        else:
+            selected_profile = st.selectbox(
+                "Düzenlenecek Profil",
+                editable_profiles,
+                format_func=lambda x: PROFILES[x]["display_name"]
+            )
+            
+            if selected_profile:
+                current_profile = PROFILES[selected_profile]
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    new_display_name = st.text_input(
+                        "Görünen Ad *",
+                        value=current_profile["display_name"],
+                        key=f"edit_display_{selected_profile}"
+                    )
+                    
+                    new_icon = st.text_input(
+                        "İkon (Emoji) *",
+                        value=current_profile.get("icon", "👤"),
+                        key=f"edit_icon_{selected_profile}"
+                    )
+                    
+                    new_description = st.text_area(
+                        "Açıklama",
+                        value=current_profile.get("description", ""),
+                        key=f"edit_desc_{selected_profile}"
+                    )
+                
+                with col2:
+                    new_color = st.color_picker(
+                        "Renk *",
+                        value=current_profile.get("color", "#6b7fd7"),
+                        key=f"edit_color_{selected_profile}"
+                    )
+                    
+                    st.info("💡 **Not**: Profil adı ve toplam profili durumu değiştirilemez.")
+                
+                if st.button("💾 Değişiklikleri Kaydet", type="primary", use_container_width=True):
+                    if not new_display_name:
+                        st.error("❌ Görünen ad boş olamaz!")
+                    else:
+                        try:
+                            profile_data = {
+                                "name": selected_profile,  # Name cannot be changed
+                                "display_name": new_display_name,
+                                "icon": new_icon if new_icon else "👤",
+                                "color": new_color,
+                                "is_aggregate": current_profile.get("is_aggregate", False),  # Cannot be changed
+                                "description": new_description,
+                                "order": current_profile.get("order", PROFILE_ORDER.index(selected_profile) + 1)
+                            }
+                            
+                            if save_profile_to_sheets(profile_data):
+                                st.success(f"✅ '{new_display_name}' profili başarıyla güncellendi!")
+                                time.sleep(1.5)
+                                st.rerun()
+                            else:
+                                st.error("❌ Profil güncellenemedi. Google Sheets bağlantısını kontrol edin.")
+                        except Exception as e:
+                            st.error(f"❌ Hata: {str(e)}")
+    
+    # ==================== PROFİL SİL ====================
+    with tab_delete:
+        st.subheader("🗑️ Profil Sil")
+        st.caption("⚠️ **Dikkat**: Profil silindiğinde, o profile ait tüm veriler kalıcı olarak silinir!")
+        
+        # Get individual profiles (exclude TOTAL and MERT from deletion)
+        deletable_profiles = [
+            p for p in PROFILE_ORDER 
+            if p in PROFILES 
+            and not PROFILES[p].get("is_aggregate", False)
+            and p != "MERT"  # Protect main profile
+        ]
+        
+        if not deletable_profiles:
+            st.info("📝 Silinebilir profil bulunmuyor. (MERT profili korunuyor)")
+        else:
+            selected_profile = st.selectbox(
+                "Silinecek Profil",
+                deletable_profiles,
+                format_func=lambda x: PROFILES[x]["display_name"]
+            )
+            
+            if selected_profile:
+                profile_info = PROFILES[selected_profile]
+                
+                st.warning(f"""
+                **⚠️ UYARI: Bu işlem geri alınamaz!**
+                
+                Silinecek profil: **{profile_info['display_name']}**
+                - Profil adı: {selected_profile}
+                - Açıklama: {profile_info.get('description', 'Yok')}
+                
+                Bu profilin tüm varlık verileri ve geçmişi silinecektir.
+                """)
+                
+                confirm_text = st.text_input(
+                    "Silmek için profil adını yazın",
+                    placeholder=selected_profile,
+                    key=f"delete_confirm_{selected_profile}"
+                )
+                
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    if st.button("🗑️ Profili Sil", type="primary", use_container_width=True):
+                        if confirm_text.strip().upper() != selected_profile:
+                            st.error(f"❌ Onay için '{selected_profile}' yazmanız gerekiyor!")
+                        else:
+                            try:
+                                if delete_profile_from_sheets(selected_profile):
+                                    st.success(f"✅ '{profile_info['display_name']}' profili başarıyla silindi!")
+                                    
+                                    # Switch to default profile if deleted profile was active
+                                    if get_current_profile() == selected_profile:
+                                        set_current_profile("MERT")
+                                    
+                                    time.sleep(1.5)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Profil silinemedi. Google Sheets bağlantısını kontrol edin.")
+                            except Exception as e:
+                                st.error(f"❌ Hata: {str(e)}")
+                
+                with col2:
+                    st.button("❌ İptal", use_container_width=True)
+    
+    # ==================== PROFİL LİSTESİ ====================
+    st.markdown("---")
+    st.subheader("📋 Mevcut Profiller")
+    
+    try:
+        load_profiles_from_sheets()
+    except:
+        pass
+    
+    if PROFILES:
+        profile_df = pd.DataFrame([
+            {
+                "Profil": PROFILES[p]["display_name"],
+                "Ad": p,
+                "İkon": PROFILES[p].get("icon", "👤"),
+                "Renk": PROFILES[p].get("color", "#6b7fd7"),
+                "Tip": "Toplam" if PROFILES[p].get("is_aggregate", False) else "Bireysel",
+                "Açıklama": PROFILES[p].get("description", "")
+            }
+            for p in PROFILE_ORDER if p in PROFILES
+        ])
+        
+        st.dataframe(
+            styled_dataframe(profile_df),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("📝 Henüz profil eklenmemiş.")
 
 # Otomatik yenileme kaldırıldı - sadece sayaç gösterimi var
 # Burada ayrı bir timer'a gerek yok
