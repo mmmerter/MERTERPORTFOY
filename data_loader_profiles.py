@@ -60,6 +60,9 @@ def _get_profile_sheet(sheet_type="main", profile_name=None):
     try:
         client = _get_gspread_client()
         if client is None:
+            error_msg = f"❌ Google Sheets bağlantısı kurulamadı ({profile_name} profili). Lütfen Google Sheets servis hesabı ayarlarını kontrol edin veya internet bağlantınızı kontrol edin."
+            st.error(error_msg)
+            _warn_once(f"sheet_client_connection_{profile_name}", error_msg)
             return None
         
         spreadsheet = client.open(SHEET_NAME)
@@ -82,7 +85,7 @@ def _get_profile_sheet(sheet_type="main", profile_name=None):
                         worksheet.append_row(headers)
                         st.success("✅ 'annem' worksheet'i otomatik oluşturuldu. Artık ANNEM profiline varlık ekleyebilirsiniz!")
                     except Exception as e:
-                        error_msg = f"❌ ANNEM profili worksheet'i bulunamadı ve oluşturulamadı. Hata: {str(e)}. Google Sheets'te 'annem' adlı bir worksheet oluşturun veya servis hesabına gerekli izinleri verin."
+                        error_msg = f"❌ ANNEM profili için Google Sheets worksheet'i bulunamadı ve otomatik oluşturulamadı.\n\n**Çözüm:**\n1. Google Sheets'te '{SHEET_NAME}' dosyasını açın\n2. 'annem' adlı yeni bir worksheet (sekme) oluşturun\n3. İlk satıra şu başlıkları ekleyin: Kod, Pazar, Adet, Maliyet, Tip, Notlar\n4. Servis hesabının bu dosyaya yazma izni olduğundan emin olun\n\n**Teknik Hata:** {str(e)}"
                         st.error(error_msg)
                         _warn_once(f"sheet_missing_annem", error_msg)
                         return None
@@ -168,6 +171,9 @@ def _get_profile_sheet(sheet_type="main", profile_name=None):
         
         return worksheet
     except Exception as e:
+        error_msg = f"❌ Google Sheets işlemi başarısız oldu ({profile_name} profili). Hata: {str(e)}. Lütfen Google Sheets bağlantısını ve servis hesabı izinlerini kontrol edin."
+        st.error(error_msg)
+        _warn_once(f"sheet_error_{profile_name}", error_msg)
         return None
 
 
@@ -188,12 +194,7 @@ def get_data_from_sheet_profile(profile_name=None):
     try:
         worksheet = _get_profile_sheet("main", profile_name)
         if worksheet is None:
-            error_msg = f"⚠️ Google Sheets verisine ulaşılamadı ({profile_name} profili). Worksheet bulunamadı veya oluşturulamadı. Lütfen Google Sheets'te '{profile_name.lower()}' adlı bir worksheet oluşturun veya servis hesabına gerekli izinleri verin."
-            st.warning(error_msg)
-            _warn_once(
-                f"sheet_client_{profile_name}",
-                error_msg,
-            )
+            # Hata mesajı zaten _get_profile_sheet içinde gösterildi, burada sadece boş DataFrame döndür
             return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         
         data = worksheet.get_all_records()
