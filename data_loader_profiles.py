@@ -9,6 +9,7 @@ from data_loader import (
     _get_gspread_client,
     _warn_once,
     _normalize_tip_value,
+    _retry_with_backoff,
     SHEET_NAME,
     DAILY_BASE_SHEET_NAME,
     # Import other functions that don't need modification
@@ -26,6 +27,9 @@ from profile_manager import (
     get_individual_profiles,
 )
 from datetime import datetime, timedelta
+from logger import get_logger
+
+logger = get_logger()
 
 
 def _find_worksheet_flexible(spreadsheet, possible_names):
@@ -65,7 +69,12 @@ def _get_profile_sheet(sheet_type="main", profile_name=None):
             _warn_once(f"sheet_client_connection_{profile_name}", error_msg)
             return None
         
-        spreadsheet = client.open(SHEET_NAME)
+        def _open_spreadsheet():
+            return client.open(SHEET_NAME)
+        
+        spreadsheet = _retry_with_backoff(_open_spreadsheet, max_retries=2, initial_delay=1.0, max_delay=30.0)
+        if spreadsheet is None:
+            return None
         
         # Determine sheet name based on profile and type
         if sheet_type == "main":
@@ -152,22 +161,26 @@ def _get_profile_sheet(sheet_type="main", profile_name=None):
                 }
                 sheet_name = base_names.get(sheet_type, sheet_name)
             
-            try:
-                worksheet = spreadsheet.worksheet(sheet_name)
-            except Exception:
-                # Worksheet doesn't exist, create it
-                worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=20)
-                
-                # Add headers based on sheet type
-                if sheet_type == "sales":
-                    headers = ["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"]
-                    worksheet.append_row(headers)
-                elif sheet_type in ["portfolio_history", "history_bist", "history_abd", "history_fon", "history_emtia", "history_nakit"]:
-                    headers = ["Tarih", "Değer_TRY", "Değer_USD"]
-                    worksheet.append_row(headers)
-                elif sheet_type == "daily_base_prices":
-                    headers = ["Tarih", "Saat", "Kod", "Fiyat", "PB"]
-                    worksheet.append_row(headers)
+            def _get_or_create_worksheet():
+                try:
+                    return spreadsheet.worksheet(sheet_name)
+                except Exception:
+                    # Worksheet doesn't exist, create it
+                    worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=20)
+                    
+                    # Add headers based on sheet type
+                    if sheet_type == "sales":
+                        headers = ["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"]
+                        worksheet.append_row(headers)
+                    elif sheet_type in ["portfolio_history", "history_bist", "history_abd", "history_fon", "history_emtia", "history_nakit"]:
+                        headers = ["Tarih", "Değer_TRY", "Değer_USD"]
+                        worksheet.append_row(headers)
+                    elif sheet_type == "daily_base_prices":
+                        headers = ["Tarih", "Saat", "Kod", "Fiyat", "PB"]
+                        worksheet.append_row(headers)
+                    return worksheet
+            
+            worksheet = _retry_with_backoff(_get_or_create_worksheet, max_retries=2, initial_delay=1.0, max_delay=30.0)
         
         return worksheet
     except Exception as e:
@@ -177,7 +190,7 @@ def _get_profile_sheet(sheet_type="main", profile_name=None):
         return None
 
 
-@st.cache_data(ttl=600)  # 10 dakika cache - Sheets verileri daha az sık değişir
+@st.cache_data(ttl=900)  # 15 dakika cache - Sheets verileri daha az sık değişir (quota koruması için artırıldı)
 def get_data_from_sheet_profile(profile_name=None):
     """
     Get portfolio data for a specific profile.
@@ -197,7 +210,11 @@ def get_data_from_sheet_profile(profile_name=None):
             # Hata mesajı zaten _get_profile_sheet içinde gösterildi, burada sadece boş DataFrame döndür
             return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         
-        data = worksheet.get_all_records()
+        # Retry mekanizması ile veri okuma
+        def _fetch_profile_data():
+            return worksheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_profile_data, max_retries=3, initial_delay=2.0, max_delay=60.0)
         if not data:
             return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         
@@ -215,12 +232,22 @@ def get_data_from_sheet_profile(profile_name=None):
         
         return df
     except Exception as e:
-        error_msg = f"❌ Google Sheets verisi okunurken hata oluştu ({profile_name} profili). Hata: {str(e)}"
-        st.error(error_msg)
-        _warn_once(
-            f"sheet_client_error_{profile_name}",
-            error_msg,
-        )
+        error_msg = str(e)
+        if '429' in error_msg or 'quota' in error_msg.lower() or 'Quota exceeded' in error_msg:
+            display_msg = f"⚠️ Google Sheets API quota limiti aşıldı ({profile_name} profili). Birkaç dakika bekleyip tekrar deneyin."
+            st.error(display_msg)
+            _warn_once(
+                f"sheet_quota_error_{profile_name}",
+                display_msg,
+            )
+        else:
+            display_msg = f"❌ Google Sheets verisi okunurken hata oluştu ({profile_name} profili). Hata: {error_msg}"
+            st.error(display_msg)
+            _warn_once(
+                f"sheet_client_error_{profile_name}",
+                display_msg,
+            )
+        logger.error(f"Google Sheets veri okuma hatası ({profile_name}): {error_msg}", exc_info=True)
         return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
 
 
@@ -292,7 +319,7 @@ def save_data_to_sheet_profile(df, profile_name=None):
         st.error(error_msg)
 
 
-@st.cache_data(ttl=600)  # 10 dakika cache - Satış geçmişi daha az sık değişir
+@st.cache_data(ttl=900)  # 15 dakika cache - Satış geçmişi daha az sık değişir (quota koruması için artırıldı)
 def get_sales_history_profile(profile_name=None):
     """
     Get sales history for a specific profile.
@@ -324,9 +351,13 @@ def get_sales_history_profile(profile_name=None):
         if worksheet is None:
             return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
         
-        data = worksheet.get_all_records()
+        def _fetch_sales():
+            return worksheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_sales, max_retries=3, initial_delay=2.0, max_delay=60.0)
         return pd.DataFrame(data) if data else pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
-    except Exception:
+    except Exception as e:
+        logger.error(f"Satış geçmişi okuma hatası ({profile_name}): {str(e)}", exc_info=True)
         return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
 
 
@@ -372,7 +403,10 @@ def read_portfolio_history_profile(profile_name=None):
         if worksheet is None:
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         
-        data = worksheet.get_all_records()
+        def _fetch_history():
+            return worksheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_history, max_retries=3, initial_delay=2.0, max_delay=60.0)
         if not data:
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         
@@ -387,7 +421,8 @@ def read_portfolio_history_profile(profile_name=None):
             df["Değer_USD"] = 0.0
         
         return df.sort_values("Tarih")
-    except Exception:
+    except Exception as e:
+        logger.error(f"Portfolio history okuma hatası ({profile_name}): {str(e)}", exc_info=True)
         return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
 
 
@@ -522,7 +557,10 @@ def read_history_market_profile(market_type, profile_name=None):
         if worksheet is None:
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         
-        data = worksheet.get_all_records()
+        def _fetch_market_history():
+            return worksheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_market_history, max_retries=3, initial_delay=2.0, max_delay=60.0)
         if not data:
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         
@@ -537,7 +575,8 @@ def read_history_market_profile(market_type, profile_name=None):
             df["Değer_USD"] = 0.0
         
         return df.sort_values("Tarih")
-    except Exception:
+    except Exception as e:
+        logger.error(f"Market history okuma hatası ({profile_name}, {market_type}): {str(e)}", exc_info=True)
         return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
 
 

@@ -17,6 +17,9 @@ import socket
 import urllib.parse
 from utils import get_yahoo_symbol
 import pytz
+import time
+from functools import wraps
+from logger import get_logger
 
 # Google Sheets / network işlemleri sonsuza kadar beklemesin diye global timeout
 # Timeout'u optimize et - çok uzun bekleme yerine daha hızlı hata yakalama
@@ -27,6 +30,12 @@ DAILY_BASE_SHEET_NAME = "daily_base_prices"  # Günlük baz fiyatlar için
 
 # Google Sheets client cache
 _client_cache = None
+
+# Rate limiting için son istek zamanı
+_last_request_time = 0
+_min_request_interval = 0.1  # İstekler arası minimum bekleme (100ms)
+
+logger = get_logger()
 
 
 def _warn_once(key: str, message: str):
@@ -60,6 +69,92 @@ def _normalize_tip_value(value: str) -> str:
         return "Takip"
     return text
 
+
+def _rate_limit():
+    """Rate limiting: İstekler arasında minimum bekleme süresi."""
+    global _last_request_time
+    current_time = time.time()
+    elapsed = current_time - _last_request_time
+    if elapsed < _min_request_interval:
+        sleep_time = _min_request_interval - elapsed
+        time.sleep(sleep_time)
+    _last_request_time = time.time()
+
+
+def _retry_with_backoff(func, max_retries=3, initial_delay=1.0, max_delay=60.0, backoff_factor=2.0):
+    """
+    Google Sheets API çağrıları için exponential backoff ile retry mekanizması.
+    429 (quota exceeded) hatalarında özellikle yararlıdır.
+    
+    Args:
+        func: Çağrılacak fonksiyon (lambda veya callable)
+        max_retries: Maksimum deneme sayısı
+        initial_delay: İlk bekleme süresi (saniye)
+        max_delay: Maksimum bekleme süresi (saniye)
+        backoff_factor: Her denemede bekleme süresini artırma faktörü
+    
+    Returns:
+        Fonksiyon sonucu
+    
+    Raises:
+        Son exception (tüm denemeler başarısız olursa)
+    """
+    last_exception = None
+    
+    for attempt in range(max_retries):
+        try:
+            # Rate limiting uygula
+            _rate_limit()
+            return func()
+        except gspread.exceptions.APIError as e:
+            last_exception = e
+            error_code = getattr(e, 'response', {}).get('status', None) if hasattr(e, 'response') else None
+            
+            # 429 hatası (quota exceeded) için özel işlem
+            if error_code == 429 or '429' in str(e) or 'Quota exceeded' in str(e) or 'quota' in str(e).lower():
+                if attempt < max_retries - 1:
+                    # Exponential backoff hesapla
+                    delay = min(initial_delay * (backoff_factor ** attempt), max_delay)
+                    logger.warning(
+                        f"Google Sheets API quota aşıldı (deneme {attempt + 1}/{max_retries}). "
+                        f"{delay:.1f} saniye bekleniyor..."
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.error(f"Google Sheets API quota hatası: {str(e)}")
+                    raise
+            else:
+                # Diğer API hataları için de retry yap ama daha kısa bekleme ile
+                if attempt < max_retries - 1:
+                    delay = min(initial_delay * (backoff_factor ** attempt), max_delay / 2)
+                    logger.warning(
+                        f"Google Sheets API hatası (deneme {attempt + 1}/{max_retries}): {str(e)}. "
+                        f"{delay:.1f} saniye bekleniyor..."
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise
+        except Exception as e:
+            # Beklenmeyen hatalar için de retry yap
+            if attempt < max_retries - 1:
+                delay = min(initial_delay * (backoff_factor ** attempt), max_delay / 4)
+                logger.warning(
+                    f"Google Sheets işlemi başarısız (deneme {attempt + 1}/{max_retries}): {str(e)}. "
+                    f"{delay:.1f} saniye bekleniyor..."
+                )
+                time.sleep(delay)
+                last_exception = e
+                continue
+            else:
+                raise
+    
+    # Tüm denemeler başarısız olduysa son exception'ı fırlat
+    if last_exception:
+        raise last_exception
+
+
 def _get_gspread_client():
     """Google Sheets client'ı cache'ler"""
     global _client_cache
@@ -72,7 +167,7 @@ def _get_gspread_client():
             _client_cache = None
     return _client_cache
 
-@st.cache_data(ttl=600)  # 10 dakika cache - Sheets verileri daha az sık değişir
+@st.cache_data(ttl=900)  # 15 dakika cache - Sheets verileri daha az sık değişir (quota koruması için artırıldı)
 def get_data_from_sheet():
     try:
         client = _get_gspread_client()
@@ -82,8 +177,14 @@ def get_data_from_sheet():
                 "Google Sheets verisine ulaşılamadı. İnternet bağlantısını veya servis hesabı ayarlarını kontrol et.",
             )
             return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
-        sheet = client.open(SHEET_NAME).sheet1
-        data = sheet.get_all_records()
+        
+        # Retry mekanizması ile sheet açma ve veri okuma
+        def _fetch_data():
+            sheet = client.open(SHEET_NAME).sheet1
+            return sheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_data, max_retries=3, initial_delay=2.0, max_delay=60.0)
+        
         if not data: 
             return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
         df = pd.DataFrame(data)
@@ -97,11 +198,19 @@ def get_data_from_sheet():
             df.loc[df["Pazar"].str.upper().str.contains("FIZIKI", na=False), "Pazar"] = "EMTIA"
             df["Tip"] = df["Tip"].apply(_normalize_tip_value)
         return df
-    except Exception:
-        _warn_once(
-            "sheet_client_error",
-            "Google Sheets verisi okunurken hata oluştu. Lütfen tekrar deneyin.",
-        )
+    except Exception as e:
+        error_msg = str(e)
+        if '429' in error_msg or 'quota' in error_msg.lower() or 'Quota exceeded' in error_msg:
+            _warn_once(
+                "sheet_quota_error",
+                "⚠️ Google Sheets API quota limiti aşıldı. Birkaç dakika bekleyip tekrar deneyin.",
+            )
+        else:
+            _warn_once(
+                "sheet_client_error",
+                "Google Sheets verisi okunurken hata oluştu. Lütfen tekrar deneyin.",
+            )
+        logger.error(f"Google Sheets veri okuma hatası: {error_msg}", exc_info=True)
         return pd.DataFrame(columns=["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"])
 
 def save_data_to_sheet(df):
@@ -115,16 +224,21 @@ def save_data_to_sheet(df):
     except Exception:
         pass
 
-@st.cache_data(ttl=600)  # 10 dakika cache - Satış geçmişi daha az sık değişir
+@st.cache_data(ttl=900)  # 15 dakika cache - Satış geçmişi daha az sık değişir (quota koruması için artırıldı)
 def get_sales_history():
     try:
         client = _get_gspread_client()
         if client is None:
             return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
-        sheet = client.open(SHEET_NAME).worksheet("Satislar")
-        data = sheet.get_all_records()
+        
+        def _fetch_sales():
+            sheet = client.open(SHEET_NAME).worksheet("Satislar")
+            return sheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_sales, max_retries=3, initial_delay=2.0, max_delay=60.0)
         return pd.DataFrame(data) if data else pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
-    except Exception:
+    except Exception as e:
+        logger.error(f"Satış geçmişi okuma hatası: {str(e)}", exc_info=True)
         return pd.DataFrame(columns=["Tarih", "Kod", "Pazar", "Satılan Adet", "Satış Fiyatı", "Maliyet", "Kâr/Zarar"])
 
 def add_sale_record(date, code, market, qty, price, cost, profit):
@@ -613,7 +727,9 @@ def _get_history_sheet():
         if client is None:
             return None
         # Ana sheet ile aynı dosyada "portfolio_history" isimli sayfa:
-        sheet = client.open(SHEET_NAME).worksheet("portfolio_history")
+        def _open_sheet():
+            return client.open(SHEET_NAME).worksheet("portfolio_history")
+        sheet = _retry_with_backoff(_open_sheet, max_retries=2, initial_delay=1.0, max_delay=30.0)
         return sheet
     except Exception:
         return None
@@ -629,7 +745,10 @@ def read_portfolio_history():
         return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
 
     try:
-        data = sheet.get_all_records()
+        def _fetch_history():
+            return sheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_history, max_retries=3, initial_delay=2.0, max_delay=60.0)
         if not data:
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         df = pd.DataFrame(data)
@@ -642,7 +761,8 @@ def read_portfolio_history():
         if "Değer_USD" not in df.columns:
             df["Değer_USD"] = 0.0
         return df.sort_values("Tarih")
-    except Exception:
+    except Exception as e:
+        logger.error(f"Portfolio history okuma hatası: {str(e)}", exc_info=True)
         return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
 
 
@@ -860,7 +980,9 @@ def _get_market_history_sheet(ws_name: str):
         client = _get_gspread_client()
         if client is None:
             return None
-        sheet = client.open(SHEET_NAME).worksheet(ws_name)
+        def _open_market_sheet():
+            return client.open(SHEET_NAME).worksheet(ws_name)
+        sheet = _retry_with_backoff(_open_market_sheet, max_retries=2, initial_delay=1.0, max_delay=30.0)
         return sheet
     except Exception:
         return None
@@ -872,7 +994,10 @@ def _read_market_history(ws_name: str):
         return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
 
     try:
-        data = sheet.get_all_records()
+        def _fetch_market_history():
+            return sheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_market_history, max_retries=3, initial_delay=2.0, max_delay=60.0)
         if not data:
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         df = pd.DataFrame(data)
@@ -885,7 +1010,8 @@ def _read_market_history(ws_name: str):
         if "Değer_USD" not in df.columns:
             df["Değer_USD"] = 0.0
         return df.sort_values("Tarih")
-    except Exception:
+    except Exception as e:
+        logger.error(f"Market history okuma hatası ({ws_name}): {str(e)}", exc_info=True)
         return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
 
 
@@ -960,14 +1086,19 @@ def _get_daily_base_sheet():
         client = _get_gspread_client()
         if client is None:
             return None
-        spreadsheet = client.open(SHEET_NAME)
-        try:
-            sheet = spreadsheet.worksheet(DAILY_BASE_SHEET_NAME)
-        except Exception:
-            # Sheet yoksa oluştur
-            sheet = spreadsheet.add_worksheet(title=DAILY_BASE_SHEET_NAME, rows=1000, cols=10)
-            # Header ekle
-            sheet.append_row(["Tarih", "Saat", "Kod", "Fiyat", "PB"])
+        
+        def _open_daily_base():
+            spreadsheet = client.open(SHEET_NAME)
+            try:
+                return spreadsheet.worksheet(DAILY_BASE_SHEET_NAME)
+            except Exception:
+                # Sheet yoksa oluştur
+                sheet = spreadsheet.add_worksheet(title=DAILY_BASE_SHEET_NAME, rows=1000, cols=10)
+                # Header ekle
+                sheet.append_row(["Tarih", "Saat", "Kod", "Fiyat", "PB"])
+                return sheet
+        
+        sheet = _retry_with_backoff(_open_daily_base, max_retries=2, initial_delay=1.0, max_delay=30.0)
         return sheet
     except Exception:
         return None
@@ -1002,7 +1133,10 @@ def get_daily_base_prices():
             target_date = today_str
         
         # Sheet'ten hedef tarihin verilerini çek
-        data = sheet.get_all_records()
+        def _fetch_daily_base():
+            return sheet.get_all_records()
+        
+        data = _retry_with_backoff(_fetch_daily_base, max_retries=3, initial_delay=2.0, max_delay=60.0)
         if not data:
             return pd.DataFrame(columns=["Kod", "Fiyat", "PB"])
         
@@ -1017,7 +1151,8 @@ def get_daily_base_prices():
         df_today = df_today.groupby("Kod").last().reset_index()
         return df_today[["Kod", "Fiyat", "PB"]]
     
-    except Exception:
+    except Exception as e:
+        logger.error(f"Daily base prices okuma hatası: {str(e)}", exc_info=True)
         return pd.DataFrame(columns=["Kod", "Fiyat", "PB"])
 
 
