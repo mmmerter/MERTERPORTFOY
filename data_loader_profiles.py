@@ -403,8 +403,11 @@ def read_portfolio_history_profile(profile_name=None):
         if worksheet is None:
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         
+        # Expected headers to avoid duplicate header errors
+        expected_headers = ["Tarih", "Değer_TRY", "Değer_USD"]
+        
         def _fetch_history():
-            return worksheet.get_all_records()
+            return worksheet.get_all_records(expected_headers=expected_headers)
         
         data = _retry_with_backoff(_fetch_history, max_retries=3, initial_delay=2.0, max_delay=60.0)
         if not data:
@@ -557,8 +560,11 @@ def read_history_market_profile(market_type, profile_name=None):
         if worksheet is None:
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         
+        # Expected headers to avoid duplicate header errors
+        expected_headers = ["Tarih", "Değer_TRY", "Değer_USD"]
+        
         def _fetch_market_history():
-            return worksheet.get_all_records()
+            return worksheet.get_all_records(expected_headers=expected_headers)
         
         data = _retry_with_backoff(_fetch_market_history, max_retries=3, initial_delay=2.0, max_delay=60.0)
         if not data:
