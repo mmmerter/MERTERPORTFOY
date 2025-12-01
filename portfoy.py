@@ -269,6 +269,20 @@ def render_portfolio_news_section(portfolio_df, watchlist_df=None):
 
 
 # --- ANA DATA ---
+# Manuel yenileme butonu - F5 yaptığınızda güncel veriler için
+col_refresh, col_space = st.columns([0.15, 0.85])
+with col_refresh:
+    if st.button("🔄 Yenile", help="Tüm verileri yeniden yükle (cache'i temizle)", key="refresh_button"):
+        # Tüm kritik cache'leri temizle
+        get_data_from_sheet.clear()
+        get_usd_try.clear()
+        get_tickers_data.clear()
+        # Batch cache fonksiyonlarını da temizle
+        _fetch_batch_prices_bist_abd.clear()
+        _fetch_batch_prices_crypto.clear()
+        _fetch_batch_prices_emtia.clear()
+        st.rerun()
+
 # Lazy loading ile performans optimizasyonu
 with st.spinner("📊 Portföy verileri yükleniyor..."):
     portfoy_df = get_data_from_sheet()

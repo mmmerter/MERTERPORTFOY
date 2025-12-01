@@ -305,7 +305,7 @@ def get_crypto_globals():
         return d["total_market_cap"]["usd"], d["market_cap_percentage"]["btc"], d["total_market_cap"]["usd"] * (1 - ((d["market_cap_percentage"]["btc"] + d["market_cap_percentage"]["eth"]) / 100)), 100 - (d["market_cap_percentage"]["btc"] + d["market_cap_percentage"]["eth"]), 0
     except: return 0, 0, 0, 0, 0
 
-@st.cache_data(ttl=600)  # 10 dakika cache - döviz kuru daha az değişir
+@st.cache_data(ttl=300)  # 5 dakika cache - F5 ile güncel kur için optimize edildi
 def get_usd_try():
     try: 
         ticker = yf.Ticker("TRY=X")
@@ -447,7 +447,7 @@ def get_portfolio_news(portfolio_df, watchlist_df=None):
     
     return all_news[:30]  # En fazla 30 haber döndür
 
-@st.cache_data(ttl=300)  # 5 dakika cache - ticker verileri optimize edildi
+@st.cache_data(ttl=120)  # 2 dakika cache - F5 ile güncel veriler için optimize edildi
 def get_tickers_data(df_portfolio, usd_try):
     total_cap, btc_d, total_3, others_d, others_cap = get_crypto_globals()
     market_symbols = [("BIST 100", "XU100.IS"), ("USD", "TRY=X"), ("EUR", "EURTRY=X"), ("BTC/USDT", "BTC-USD"),
