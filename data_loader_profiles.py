@@ -404,7 +404,6 @@ def read_portfolio_history_profile(profile_name=None):
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         
         def _fetch_history():
-            # Always use expected_headers to avoid duplicate header errors
             expected_headers = ["Tarih", "Değer_TRY", "Değer_USD"]
             
             try:
@@ -416,20 +415,37 @@ def read_portfolio_history_profile(profile_name=None):
                     worksheet.update([headers], range_name="A1:C1")
                     return []
                 
-                # Always use expected_headers parameter to prevent duplicate header errors
-                # This will map columns by position if headers don't match exactly
-                return worksheet.get_all_records(expected_headers=expected_headers)
-            except Exception as e:
-                # If there's an error, try to fix headers and retry
-                try:
-                    logger.warning(f"Header hatası, header'lar düzeltiliyor: {str(e)}")
-                    # Try to fix headers by updating the first row
+                # Check for duplicate headers and fix them if needed
+                first_row_cleaned = [h.strip() if h else "" for h in first_row]
+                if len(first_row_cleaned) != len(set(first_row_cleaned)) or any(h == "" for h in first_row_cleaned[:3]):
+                    # Duplicate headers detected or missing headers - fix them
+                    logger.warning(f"Duplicate or invalid headers detected, fixing headers")
                     headers = ["Tarih", "Değer_TRY", "Değer_USD"]
                     worksheet.update([headers], range_name="A1:C1")
-                    return worksheet.get_all_records(expected_headers=expected_headers)
+                
+                # Now read with expected_headers (headers are fixed, so this should work)
+                return worksheet.get_all_records(expected_headers=expected_headers)
+            except Exception as e:
+                # If there's still an error, try reading rows directly
+                try:
+                    logger.warning(f"Header hatası, satır satır okunuyor: {str(e)}")
+                    # Read all rows and manually parse (skip header row)
+                    all_rows = worksheet.get_all_values()
+                    if len(all_rows) <= 1:
+                        return []
+                    
+                    # Skip header row and parse data rows
+                    records = []
+                    for row in all_rows[1:]:
+                        if len(row) >= 3 and any(cell.strip() for cell in row[:3]):
+                            records.append({
+                                "Tarih": row[0] if len(row) > 0 else "",
+                                "Değer_TRY": row[1] if len(row) > 1 else "",
+                                "Değer_USD": row[2] if len(row) > 2 else ""
+                            })
+                    return records
                 except Exception as e2:
-                    logger.error(f"Header düzeltme başarısız: {str(e2)}")
-                    # Last resort: return empty list
+                    logger.error(f"Veri okuma başarısız: {str(e2)}")
                     return []
         
         data = _retry_with_backoff(_fetch_history, max_retries=3, initial_delay=2.0, max_delay=60.0)
@@ -586,7 +602,6 @@ def read_history_market_profile(market_type, profile_name=None):
             return pd.DataFrame(columns=["Tarih", "Değer_TRY", "Değer_USD"])
         
         def _fetch_market_history():
-            # Always use expected_headers to avoid duplicate header errors
             expected_headers = ["Tarih", "Değer_TRY", "Değer_USD"]
             
             try:
@@ -598,20 +613,37 @@ def read_history_market_profile(market_type, profile_name=None):
                     worksheet.update([headers], range_name="A1:C1")
                     return []
                 
-                # Always use expected_headers parameter to prevent duplicate header errors
-                # This will map columns by position if headers don't match exactly
-                return worksheet.get_all_records(expected_headers=expected_headers)
-            except Exception as e:
-                # If there's an error, try to fix headers and retry
-                try:
-                    logger.warning(f"Header hatası, header'lar düzeltiliyor: {str(e)}")
-                    # Try to fix headers by updating the first row
+                # Check for duplicate headers and fix them if needed
+                first_row_cleaned = [h.strip() if h else "" for h in first_row]
+                if len(first_row_cleaned) != len(set(first_row_cleaned)) or any(h == "" for h in first_row_cleaned[:3]):
+                    # Duplicate headers detected or missing headers - fix them
+                    logger.warning(f"Duplicate or invalid headers detected, fixing headers")
                     headers = ["Tarih", "Değer_TRY", "Değer_USD"]
                     worksheet.update([headers], range_name="A1:C1")
-                    return worksheet.get_all_records(expected_headers=expected_headers)
+                
+                # Now read with expected_headers (headers are fixed, so this should work)
+                return worksheet.get_all_records(expected_headers=expected_headers)
+            except Exception as e:
+                # If there's still an error, try reading rows directly
+                try:
+                    logger.warning(f"Header hatası, satır satır okunuyor: {str(e)}")
+                    # Read all rows and manually parse (skip header row)
+                    all_rows = worksheet.get_all_values()
+                    if len(all_rows) <= 1:
+                        return []
+                    
+                    # Skip header row and parse data rows
+                    records = []
+                    for row in all_rows[1:]:
+                        if len(row) >= 3 and any(cell.strip() for cell in row[:3]):
+                            records.append({
+                                "Tarih": row[0] if len(row) > 0 else "",
+                                "Değer_TRY": row[1] if len(row) > 1 else "",
+                                "Değer_USD": row[2] if len(row) > 2 else ""
+                            })
+                    return records
                 except Exception as e2:
-                    logger.error(f"Header düzeltme başarısız: {str(e2)}")
-                    # Last resort: return empty list
+                    logger.error(f"Veri okuma başarısız: {str(e2)}")
                     return []
         
         data = _retry_with_backoff(_fetch_market_history, max_retries=3, initial_delay=2.0, max_delay=60.0)
