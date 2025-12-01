@@ -298,6 +298,262 @@ def get_daily_movers_css() -> str:
     """
 
 
+def get_light_theme_css() -> str:
+    """Light tema CSS stilleri."""
+    return """
+<style>
+    :root {
+        color-scheme: light;
+    }
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stAppBody"] {
+        background-color: #f5f7fb !important;
+        color: #1f2937 !important;
+    }
+    .kral-header {
+        background: linear-gradient(135deg, #ffffff, #edf1fb);
+        border: 1px solid #d5d9ea;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+    }
+    .kral-header-title {
+        color: #111827;
+    }
+    .kral-header-sub {
+        color: #4b5563;
+    }
+    .ticker-container {
+        background: linear-gradient(135deg, #ffffff 0%, #e8edfb 100%);
+        border-bottom: 1px solid #d5d9ea;
+        box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+    }
+    .ticker-label {
+        background: linear-gradient(135deg, #f8faff 0%, #eef2ff 100%);
+        color: #405bbb;
+        border-right: 1px solid #d5d9ea;
+    }
+    .ticker-text span {
+        color: #111827 !important;
+    }
+    .kral-infobox {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+    }
+    .kral-infobox-label,
+    .kral-infobox-sub {
+        color: #4b5563;
+    }
+    .kral-infobox-value {
+        color: #111827;
+    }
+    div[data-testid="stMetric"] {
+        background-color: #ffffff !important;
+        border: 1px solid #e5e7eb !important;
+        color: #111827 !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+    }
+    div[data-testid="stMetricValue"],
+    div[data-testid="stMetricLabel"] {
+        color: #111827 !important;
+    }
+    .news-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+        color: #1f2937;
+        border-left-color: #6b7fd7;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    }
+    .news-card::before {
+        background: linear-gradient(180deg, #6b7fd7 0%, #8b9aff 100%);
+    }
+    .news-title {
+        color: #111827;
+    }
+    .news-title:hover {
+        color: #405bbb;
+    }
+    .news-meta {
+        color: #4b5563;
+    }
+    .news-asset-badge {
+        background: rgba(64, 91, 187, 0.15);
+        color: #405bbb;
+    }
+    .news-source-badge {
+        background: rgba(34, 197, 94, 0.15);
+        color: #22c55e;
+    }
+    .news-source-badge.izleme {
+        background: rgba(249, 115, 22, 0.15);
+        color: #f97316;
+    }
+    .portfolio-news-header {
+        background: linear-gradient(135deg, #ffffff, #edf1fb);
+        border: 1px solid #d5d9ea;
+    }
+    .portfolio-news-header h3 {
+        color: #111827;
+    }
+    .portfolio-news-header p {
+        color: #4b5563;
+    }
+    .news-filter-chip {
+        background: rgba(64, 91, 187, 0.1);
+        color: #405bbb;
+        border: 1px solid rgba(64, 91, 187, 0.2);
+    }
+    .news-filter-chip:hover {
+        background: rgba(64, 91, 187, 0.15);
+    }
+    .news-filter-chip.active {
+        background: linear-gradient(135deg, #6b7fd7 0%, #8b9aff 100%);
+        color: #ffffff;
+    }
+    
+    /* Modern Dataframe Stilleri - Light Tema */
+    [data-testid="stDataFrame"] {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    }
+    
+    [data-testid="stDataFrame"] > div {
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+    }
+    
+    [data-testid="stDataFrame"] table {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%) !important;
+    }
+    
+    [data-testid="stDataFrame"] thead th {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        padding: 16px 12px !important;
+        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%) !important;
+        color: #4b5563 !important;
+        border-bottom: 2px solid #6b7fd7 !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody td {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        font-size: 15px !important;
+        font-weight: 500 !important;
+        padding: 14px 12px !important;
+        color: #111827 !important;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody tr {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        background: transparent !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody tr:hover {
+        background: rgba(107, 127, 215, 0.08) !important;
+        transform: scale(1.005) !important;
+        box-shadow: 0 2px 8px rgba(107, 127, 215, 0.15) !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody tr:nth-child(even) {
+        background: rgba(0, 0, 0, 0.02) !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody tr:nth-child(even):hover {
+        background: rgba(107, 127, 215, 0.08) !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody td[data-type="number"] {
+        font-weight: 600 !important;
+        font-variant-numeric: tabular-nums !important;
+        text-align: right !important;
+    }
+</style>
+"""
+
+
+def get_menu_styles(theme: str) -> Dict[str, Dict[str, str]]:
+    """Menü stilleri - tema bazlı."""
+    if theme == "light":
+        return {
+            "container": {
+                "padding": "0!important",
+                "background": "linear-gradient(135deg, #ffffff 0%, #eef2ff 100%)",
+                "border-radius": "12px",
+                "box-shadow": "0 4px 20px rgba(15, 23, 42, 0.08)",
+                "margin-bottom": "20px",
+            },
+            "icon": {
+                "color": "#405bbb",
+                "font-size": "20px",
+                "margin-right": "8px",
+            },
+            "nav-link": {
+                "font-size": "15px",
+                "text-align": "center",
+                "margin": "0px 4px",
+                "padding": "12px 20px",
+                "border-radius": "10px",
+                "font-weight": "700",
+                "color": "#4b5563",
+                "transition": "all 0.3s ease",
+                "background": "transparent",
+            },
+            "nav-link:hover": {
+                "background": "rgba(64, 91, 187, 0.12)",
+                "color": "#405bbb",
+                "transform": "translateY(-2px)",
+            },
+            "nav-link-selected": {
+                "background": "linear-gradient(135deg, #6b7fd7 0%, #8b9aff 100%)",
+                "color": "#ffffff",
+                "box-shadow": "0 4px 15px rgba(107, 127, 215, 0.35)",
+                "font-weight": "900",
+                "border": "none",
+            },
+        }
+    return {
+        "container": {
+            "padding": "0!important",
+            "background": "linear-gradient(135deg, #1a1c24 0%, #0e1117 100%)",
+            "border-radius": "12px",
+            "box-shadow": "0 4px 20px rgba(0, 0, 0, 0.4)",
+            "margin-bottom": "20px",
+        },
+        "icon": {
+            "color": "#8b9aff",
+            "font-size": "20px",
+            "margin-right": "8px",
+        },
+        "nav-link": {
+            "font-size": "15px",
+            "text-align": "center",
+            "margin": "0px 4px",
+            "padding": "12px 20px",
+            "border-radius": "10px",
+            "font-weight": "700",
+            "color": "#b0b3c0",
+            "transition": "all 0.3s ease",
+            "background": "transparent",
+        },
+        "nav-link:hover": {
+            "background": "rgba(139, 154, 255, 0.1)",
+            "color": "#8b9aff",
+            "transform": "translateY(-2px)",
+        },
+        "nav-link-selected": {
+            "background": "linear-gradient(135deg, #6b7fd7 0%, #8b9aff 100%)",
+            "color": "#ffffff",
+            "box-shadow": "0 4px 15px rgba(107, 127, 215, 0.4)",
+            "font-weight": "900",
+            "border": "none",
+        },
+    }
+
+
 def get_all_css() -> str:
     """Tüm CSS stillerini birleştirir."""
     return (
@@ -313,20 +569,29 @@ def get_all_css() -> str:
 _css_cache: Optional[str] = None
 
 
-def inject_css(css: Optional[str] = None) -> None:
+def inject_css(css: Optional[str] = None, theme: Optional[str] = None) -> None:
     """
     CSS stillerini Streamlit'e enjekte eder.
     Cache kullanarak performansı artırır.
     
     Args:
         css: Özel CSS (None ise tüm stiller kullanılır)
+        theme: Tema ("light" veya "dark", None ise session_state'den alınır)
     """
     global _css_cache
+    
+    import streamlit as st
+    
+    if theme is None:
+        theme = st.session_state.get("ui_theme", "dark")
     
     if css is None:
         if _css_cache is None:
             _css_cache = get_all_css()
         css = _css_cache
+        
+        # Light tema için override CSS ekle
+        if theme == "light":
+            css += get_light_theme_css()
     
-    import streamlit as st
     st.markdown(css, unsafe_allow_html=True)
