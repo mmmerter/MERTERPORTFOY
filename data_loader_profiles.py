@@ -36,11 +36,15 @@ def _find_worksheet_flexible(spreadsheet, possible_names):
     """
     Try to find a worksheet by trying multiple possible names.
     Returns (worksheet, found_name) or (None, None) if not found.
+    Uses retry mechanism for reliability.
     """
     for name in possible_names:
         try:
-            ws = spreadsheet.worksheet(name)
-            return ws, name
+            def _get_worksheet():
+                return spreadsheet.worksheet(name)
+            ws = _retry_with_backoff(_get_worksheet, max_retries=2, initial_delay=0.5, max_delay=10.0)
+            if ws:
+                return ws, name
         except:
             continue
     return None, None
@@ -89,10 +93,16 @@ def _get_profile_sheet(sheet_type="main", profile_name=None):
                 if worksheet is None:
                     # Worksheet bulunamadı, oluştur
                     try:
-                        worksheet = spreadsheet.add_worksheet(title="annem", rows=1000, cols=20)
-                        headers = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
-                        worksheet.append_row(headers)
-                        st.success("✅ 'annem' worksheet'i otomatik oluşturuldu. Artık ANNEM profiline varlık ekleyebilirsiniz!")
+                        # Retry mechanism ile oluştur
+                        def _create_annem_worksheet():
+                            ws = spreadsheet.add_worksheet(title="annem", rows=1000, cols=20)
+                            headers = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
+                            ws.append_row(headers)
+                            return ws
+                        
+                        worksheet = _retry_with_backoff(_create_annem_worksheet, max_retries=2, initial_delay=1.0, max_delay=30.0)
+                        if worksheet:
+                            st.success("✅ 'annem' worksheet'i otomatik oluşturuldu. Artık ANNEM profiline varlık ekleyebilirsiniz!")
                     except Exception as e:
                         error_msg = f"❌ ANNEM profili için Google Sheets worksheet'i bulunamadı ve otomatik oluşturulamadı.\n\n**Çözüm:**\n1. Google Sheets'te '{SHEET_NAME}' dosyasını açın\n2. 'annem' adlı yeni bir worksheet (sekme) oluşturun\n3. İlk satıra şu başlıkları ekleyin: Kod, Pazar, Adet, Maliyet, Tip, Notlar\n4. Servis hesabının bu dosyaya yazma izni olduğundan emin olun\n\n**Teknik Hata:** {str(e)}"
                         st.error(error_msg)
@@ -298,9 +308,52 @@ def save_data_to_sheet_profile(df, profile_name=None):
         pass
     
     try:
-        worksheet = _get_profile_sheet("main", profile_name)
+        # Retry mechanism ile worksheet'i al veya oluştur
+        def _get_or_create_worksheet():
+            worksheet = _get_profile_sheet("main", profile_name)
+            if worksheet is None:
+                # Worksheet bulunamadı, tekrar dene veya oluştur
+                client = _get_gspread_client()
+                if client is None:
+                    return None
+                
+                spreadsheet = _retry_with_backoff(
+                    lambda: client.open(SHEET_NAME),
+                    max_retries=2,
+                    initial_delay=1.0,
+                    max_delay=30.0
+                )
+                if spreadsheet is None:
+                    return None
+                
+                # ANNEM profili için özel işlem
+                if profile_name == "ANNEM":
+                    try:
+                        worksheet = spreadsheet.worksheet("annem")
+                        return worksheet
+                    except:
+                        # Oluştur
+                        worksheet = spreadsheet.add_worksheet(title="annem", rows=1000, cols=20)
+                        headers = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
+                        worksheet.append_row(headers)
+                        return worksheet
+                else:
+                    # Diğer profiller için de benzer mantık
+                    sheet_name = profile_name.lower()
+                    try:
+                        worksheet = spreadsheet.worksheet(sheet_name)
+                        return worksheet
+                    except:
+                        worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=20)
+                        headers = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
+                        worksheet.append_row(headers)
+                        return worksheet
+            return worksheet
+        
+        worksheet = _retry_with_backoff(_get_or_create_worksheet, max_retries=3, initial_delay=2.0, max_delay=60.0)
+        
         if worksheet is None:
-            error_msg = f"⚠️ {profile_name} profili için worksheet bulunamadı. Veri kaydedilemedi. Lütfen Google Sheets'te '{profile_name.lower()}' adlı bir worksheet oluşturun."
+            error_msg = f"⚠️ {profile_name} profili için worksheet bulunamadı ve oluşturulamadı. Lütfen Google Sheets'te '{profile_name.lower()}' adlı bir worksheet oluşturun."
             st.error(error_msg)
             return
         
@@ -309,14 +362,29 @@ def save_data_to_sheet_profile(df, profile_name=None):
         if "_profile" in df_to_save.columns:
             df_to_save = df_to_save.drop(columns=["_profile"])
         
-        worksheet.clear()
-        worksheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
+        # Ensure all required columns exist
+        required_cols = ["Kod", "Pazar", "Adet", "Maliyet", "Tip", "Notlar"]
+        for col in required_cols:
+            if col not in df_to_save.columns:
+                df_to_save[col] = ""
+        
+        # Save with retry
+        def _save_data():
+            worksheet.clear()
+            if not df_to_save.empty:
+                worksheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
+            else:
+                # Empty dataframe - just set headers
+                worksheet.update([required_cols], range_name="A1:F1")
+        
+        _retry_with_backoff(_save_data, max_retries=3, initial_delay=2.0, max_delay=60.0)
         
         # Clear cache
         get_data_from_sheet_profile.clear()
     except Exception as e:
         error_msg = f"❌ Veri kaydedilirken hata oluştu ({profile_name} profili). Hata: {str(e)}"
         st.error(error_msg)
+        logger.error(f"Save data error ({profile_name}): {error_msg}", exc_info=True)
 
 
 @st.cache_data(ttl=900)  # 15 dakika cache - Satış geçmişi daha az sık değişir (quota koruması için artırıldı)
