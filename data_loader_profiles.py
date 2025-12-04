@@ -205,9 +205,14 @@ def get_data_from_sheet_profile(profile_name=None):
     """
     Get portfolio data for a specific profile.
     If profile is TOTAL, aggregates data from all individual profiles.
+    
+    IMPORTANT: profile_name is used as cache key, so each profile has separate cache.
     """
     if profile_name is None:
         profile_name = get_current_profile()
+    
+    # Ensure profile_name is used in cache key by including it in function signature
+    # Cache will be separate for each profile
     
     # Handle TOTAL profile (aggregate)
     if is_aggregate_profile(profile_name):

@@ -291,8 +291,10 @@ with col_refresh:
         st.rerun()
 
 # Lazy loading ile performans optimizasyonu
+# Get current profile explicitly to ensure correct data loading
+current_profile = get_current_profile()
 with st.spinner("📊 Portföy verileri yükleniyor..."):
-    portfoy_df = get_data_from_sheet()
+    portfoy_df = get_data_from_sheet(profile_name=current_profile)
 
 # --- HEADER ---
 with st.spinner("💱 Döviz kuru alınıyor..."):
@@ -2802,7 +2804,9 @@ elif selected == "Ekle/Çıkar":
                     }
                 )
                 portfoy_df = pd.concat([portfoy_df, new_row], ignore_index=True)
-                save_data_to_sheet(portfoy_df)
+                # Get current profile explicitly before saving
+                current_profile = get_current_profile()
+                save_data_to_sheet(portfoy_df, profile_name=current_profile)
 
                 st.success(
                     "İzleme listesine eklendi!"
@@ -2836,7 +2840,9 @@ elif selected == "Ekle/Çıkar":
                     portfoy_df = pd.concat(
                         [portfoy_df, new_row], ignore_index=True
                     )
-                    save_data_to_sheet(portfoy_df)
+                    # Get current profile explicitly before saving
+                    current_profile = get_current_profile()
+                    save_data_to_sheet(portfoy_df, profile_name=current_profile)
                     st.success("Güncellendi!")
                     time.sleep(1)
                     st.rerun()
